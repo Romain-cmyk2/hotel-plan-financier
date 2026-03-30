@@ -1,0 +1,576 @@
+{
+  "nom_hotel": "Chateau d'Argenteau",
+  "nb_chambres": 70,
+  "personnes_par_chambre": 2.0,
+  "date_ouverture": "2029-07-01",
+  "nb_mois_projection": 204,
+  "nb_couverts_brasserie": 80,
+  "nb_salles_mariage": 1,
+  "nb_invites_mariage": 125,
+  "nb_invites_seminaire": 50,
+  "taux_occ": [
+    0.42,
+    0.48,
+    0.55,
+    0.62
+  ],
+  "taux_occ_brasserie": [
+    0.42,
+    0.47,
+    0.525,
+    0.6
+  ],
+  "saisonnalite": [
+    0.626,
+    0.657,
+    0.86,
+    1.017,
+    1.126,
+    1.22,
+    1.283,
+    1.33,
+    1.173,
+    1.064,
+    0.782,
+    0.86
+  ],
+  "segments": {
+    "Loisirs": {
+      "part": 0.5,
+      "prix": 250
+    },
+    "Affaires": {
+      "part": 0.25,
+      "prix": 230
+    },
+    "Groupes": {
+      "part": 0.05,
+      "prix": 195
+    },
+    "MICE": {
+      "part": 0.05,
+      "prix": 195
+    },
+    "Evenementiel": {
+      "part": 0.15,
+      "prix": 230
+    }
+  },
+  "segments_part_ota": {
+    "Loisirs": 0.75,
+    "Affaires": 0.55,
+    "Groupes": 0.2,
+    "MICE": 0.0,
+    "Evenementiel": 0.0
+  },
+  "hausse_prix_an": [
+    0.0,
+    0.025,
+    0.025,
+    0.025
+  ],
+  "brasserie_prix_souper": 75,
+  "brasserie_jours_souper": 4,
+  "brasserie_services_souper": 1.0,
+  "brasserie_prix_diner": 45,
+  "brasserie_jours_diner": 4,
+  "brasserie_services_diner": 1.5,
+  "brasserie_part_nourriture": 0.6,
+  "brasserie_part_boissons": 0.4,
+  "brasserie_ouvert_midi": 4,
+  "brasserie_couverts_midi": 40,
+  "brasserie_prix_midi": 45,
+  "brasserie_ouvert_soir": 4,
+  "brasserie_couverts_soir": 50,
+  "brasserie_prix_soir": 75,
+  "brasserie_part_interne": 0.6,
+  "brasserie_part_externe": 0.4,
+  "petit_dej_prix": 37.5,
+  "petit_dej_taux": 0.85,
+  "bar_prix_moyen": 18,
+  "bar_taux_clients_hotel": 0.4,
+  "bar_conso_moyenne": 22.0,
+  "bar_clients_ext_jour": 10,
+  "bar_conso_ext_moyenne": 25.0,
+  "bar_jours_ouvert_semaine": 7,
+  "spa_entree_hotel_prix": 0,
+  "spa_entree_hotel_taux": 0.2,
+  "spa_entree_ext_prix": 55,
+  "spa_entree_ext_nb_mois": 25,
+  "spa_soin_hotel_prix": 120,
+  "spa_soin_hotel_taux": 0.1,
+  "spa_soin_ext_prix": 150,
+  "spa_soin_ext_nb_mois": 15,
+  "spa_capacite_soins_jour": 30,
+  "spa_prix_moyen_soin": 55,
+  "spa_taux_clients_hotel": 0.25,
+  "spa_clients_ext_jour": 5,
+  "spa_prix_ext": 65,
+  "salle_mariage_prix": 7500,
+  "salle_mariage_nb_an": 49,
+  "salle_seminaire_prix": 1750,
+  "salle_seminaire_nb_an": 49,
+  "seminaire_nb_an": 50,
+  "seminaire_prix_location": 1000,
+  "seminaire_nb_participants_moy": 25,
+  "seminaire_prix_participant": 65,
+  "seminaire_duree_moy_jours": 1.0,
+  "mariage_nb_an": 20,
+  "mariage_nb_convives_moy": 120,
+  "mariage_prix_convive": 95,
+  "mariage_prix_location": 5000,
+  "divers_prix_nuitee": 3.0,
+  "divers_taux": 1.0,
+  "loyer_restaurant_mensuel": 5860,
+  "cv_hebergement_par_nuitee": {
+    "Linge / Blanchisserie": 5.5,
+    "Produits accueil": 3.5,
+    "Produits entretien": 2.5,
+    "Energie variable": 10.0,
+    "Fournitures chambres": 2.5
+  },
+  "cv_commission_ota_pct": 0.17,
+  "cv_franchise_pct": 0.04,
+  "cv_hebergement": {
+    "Blanchisserie": 8.5,
+    "Produits accueil": 3.5,
+    "Nettoyage": 12.0,
+    "Petit-dejeuner (cout)": 11.0,
+    "Commission OTA": 0.15,
+    "Divers": 5.0
+  },
+  "cv_brasserie_pct": 0.35,
+  "cv_bar_beverage_pct": 0.3,
+  "cv_bar_consommable_unite": 0.2,
+  "cv_bar_pct": 0.25,
+  "cv_spa_soin_cout": 50.0,
+  "cv_spa_produits_soin": 5.0,
+  "cv_spa_consommable_entree": 1.5,
+  "cv_spa_energie_entree": 3.0,
+  "cv_spa_piscine_entree": 0.5,
+  "cv_spa_pct": 0.2,
+  "cv_seminaire_pause_participant": 8.0,
+  "cv_seminaire_materiel_participant": 3.0,
+  "cv_seminaire_equipement": 15.0,
+  "cv_seminaire_energie": 75.0,
+  "cv_seminaire_nettoyage": 500.0,
+  "cv_seminaire_pct": 0.3,
+  "cv_mariage_energie": 150.0,
+  "cv_mariage_nettoyage": 1000.0,
+  "cv_mariage_pct": 0.35,
+  "cv_divers_consommable": 1.0,
+  "charges_patronales_pct": 0.35,
+  "personnel_hebergement": [
+    {
+      "poste": "Housekeeping / Etages",
+      "etp": 7.0,
+      "cout_brut": 35000
+    },
+    {
+      "poste": "Reception / Front Office",
+      "etp": 5.0,
+      "cout_brut": 37500
+    },
+    {
+      "poste": "Night Audit",
+      "etp": 2.0,
+      "cout_brut": 42500
+    }
+  ],
+  "personnel_brasserie": [
+    {
+      "poste": "Chef",
+      "etp": 1.5,
+      "cout_brut": 67500
+    },
+    {
+      "poste": "Cuisinier",
+      "etp": 6.0,
+      "cout_brut": 55000
+    },
+    {
+      "poste": "Serveurs",
+      "etp": 6.0,
+      "cout_brut": 42500
+    }
+  ],
+  "personnel_bar": [
+    {
+      "poste": "Barman",
+      "etp": 1,
+      "cout_brut": 37500
+    }
+  ],
+  "personnel_spa": [
+    {
+      "poste": "Spa - hote",
+      "etp": 1.0,
+      "cout_brut": 35000
+    }
+  ],
+  "personnel_indirect": [
+    {
+      "poste": "Direction generale",
+      "etp": 1.0,
+      "cout_brut": 65000
+    },
+    {
+      "poste": "Direction adjointe / Revenue Manager",
+      "etp": 1.0,
+      "cout_brut": 50000
+    },
+    {
+      "poste": "Maintenance / Technique",
+      "etp": 2.33,
+      "cout_brut": 34000
+    },
+    {
+      "poste": "Commercial / Ventes / Marketing",
+      "etp": 1.0,
+      "cout_brut": 40000
+    },
+    {
+      "poste": "Administration / Comptabilite / RH",
+      "etp": 1.5,
+      "cout_brut": 34000
+    },
+    {
+      "poste": "Extras / Renforts saisonniers",
+      "etp": 4.0,
+      "cout_brut": 24000
+    },
+    {
+      "poste": "Concierge / Bagagiste / Voiturier",
+      "etp": 3.0,
+      "cout_brut": 35000
+    }
+  ],
+  "loyer_mensuel": 120000,
+  "loyer_repartition": {
+    "hebergement": 0.65,
+    "brasserie": 0.15,
+    "bar": 0.05,
+    "spa": 0.05,
+    "salles": 0.1
+  },
+  "cf_directs_hebergement": {
+    "Linge / Blanchisserie (fixe)": 18000,
+    "Produits accueil (fixe)": 6000,
+    "Amenities & minibar": 8000
+  },
+  "cf_directs_brasserie": {
+    "Location materiel cuisine": 12000,
+    "Uniformes / EPI": 4000
+  },
+  "cf_directs_spa": {
+    "Entretien equipements spa": 8000,
+    "Produits soins (stock fixe)": 6000
+  },
+  "cf_directs_evenements": {
+    "Materiel seminaires / mariages": 5000
+  },
+  "charges_fixes_indirectes_par_annee": {
+    "Assurances": [
+      35000,
+      35000,
+      35000
+    ],
+    "Taxe fonciere": [
+      50000,
+      50000,
+      50000
+    ],
+    "Energie fixe": [
+      30000,
+      36000,
+      40000
+    ],
+    "Contrats maintenance": [
+      33750,
+      40500,
+      45000
+    ],
+    "Logiciels IT": [
+      18000,
+      21600,
+      24000
+    ],
+    "Marketing Communication": [
+      45000,
+      32500,
+      27500
+    ],
+    "Honoraires comptable juridique": [
+      13500,
+      16200,
+      18000
+    ],
+    "Abonnements cotisations": [
+      3750,
+      4500,
+      5000
+    ],
+    "Frais de gestion": [
+      0,
+      0,
+      0
+    ],
+    "Fournitures bureau": [
+      4500,
+      5400,
+      6000
+    ],
+    "Securite gardiennage": [
+      9000,
+      10800,
+      12000
+    ],
+    "Dechets collecte": [
+      6000,
+      7200,
+      8000
+    ],
+    "Jardin espaces verts": [
+      4500,
+      5400,
+      6000
+    ],
+    "Licences taxes SABAM": [
+      4000,
+      4000,
+      4000
+    ]
+  },
+  "charges_fixes_indirectes": {
+    "Assurances": 35000,
+    "Taxe fonciere": 50000,
+    "Energie fixe": 40000,
+    "Contrats maintenance": 45000,
+    "Logiciels IT": 24000,
+    "Marketing Communication": 27500,
+    "Honoraires comptable juridique": 18000,
+    "Abonnements cotisations": 5000,
+    "Fournitures bureau": 6000,
+    "Securite gardiennage": 12000,
+    "Dechets collecte": 8000,
+    "Jardin espaces verts": 6000,
+    "Licences taxes SABAM": 4000
+  },
+  "inflation_ventes": 0.025,
+  "inflation_loyer_restaurant": 0.02,
+  "inflation_personnel": 0.025,
+  "inflation_loyer": 0.02,
+  "inflation_charges_variables": 0.025,
+  "inflation_autres_charges": 0.02,
+  "inflation_an": 0.025,
+  "investissements": [
+    {
+      "categorie": "Terrain",
+      "montant": 0,
+      "duree_amort": 0
+    },
+    {
+      "categorie": "Construction",
+      "montant": 0,
+      "duree_amort": 0
+    },
+    {
+      "categorie": "Amenagements interieurs",
+      "montant": 1534444,
+      "duree_amort": 10
+    },
+    {
+      "categorie": "Mobilier & Equipements",
+      "montant": 2347485,
+      "duree_amort": 5
+    },
+    {
+      "categorie": "Branding",
+      "montant": 200000,
+      "duree_amort": 3
+    }
+  ],
+  "reinvest_pct_an": [
+    0.0,
+    0.005,
+    0.01,
+    0.015,
+    0.02,
+    0.02,
+    0.025,
+    0.025,
+    0.025,
+    0.025
+  ],
+  "reinvest_categories": [
+    "Amenagements interieurs",
+    "Mobilier & Equipements"
+  ],
+  "prets": [
+    {
+      "nom": "Banque",
+      "montant": 2500000,
+      "taux_annuel": 0.04,
+      "duree_ans": 15,
+      "differe_mois": 0,
+      "type": "annuite",
+      "subside_rw": false
+    },
+    {
+      "nom": "Banque",
+      "montant": 500000,
+      "taux_annuel": 0.03,
+      "duree_ans": 2,
+      "differe_mois": 0,
+      "type": "interet_seul",
+      "subside_rw": true
+    },
+    {
+      "nom": "Pret ROCHER",
+      "montant": 2000000,
+      "taux_annuel": 0.04,
+      "duree_ans": 15,
+      "differe_mois": 12,
+      "type": "annuite",
+      "subside_rw": false
+    }
+  ],
+  "fonds_propres_initial": 1000000,
+  "tva_ventes": {
+    "Brasserie nourriture": 0.12,
+    "Brasserie boisson": 0.21,
+    "Petit-dejeuner": 0.12,
+    "Bar": 0.21,
+    "Spa": 0.21,
+    "Salles": 0.21,
+    "Divers": 0.12,
+    "Loyer Restaurant": 0.21
+  },
+  "tva_achats": {
+    "Charges variables pdj brasserie divers salles": 0.12,
+    "Autres": 0.21
+  },
+  "tva_periodicite": "Trimestrielle",
+  "isoc": 0.25,
+  "rocher_data": {
+    "prets": [
+      {
+        "nom": "Pret banque",
+        "creancier": "Banque",
+        "montant": 11250000,
+        "taux_annuel": 0.04,
+        "duree_ans": 15,
+        "differe_mois": 0,
+        "type": "annuite",
+        "subside_rw": false
+      },
+      {
+        "nom": "Prêt banque",
+        "creancier": "Banque",
+        "montant": 1500000,
+        "taux_annuel": 0.04,
+        "duree_ans": 15,
+        "differe_mois": 0,
+        "type": "interet_seul",
+        "subside_rw": true
+      },
+      {
+        "nom": "Prêt Partenaire",
+        "creancier": "Partenaire",
+        "montant": 2000000,
+        "taux_annuel": 0.04,
+        "duree_ans": 15,
+        "differe_mois": 12,
+        "type": "annuite",
+        "subside_rw": false
+      }
+    ],
+    "investissements": [
+      {
+        "categorie": "Terrain",
+        "montant": 2951000,
+        "duree_amort": 0
+      },
+      {
+        "categorie": "Construction",
+        "montant": 16194640,
+        "duree_amort": 15
+      }
+    ],
+    "fonds_propres_initial": 6750000,
+    "fonds_propres_investisseurs": [
+      {
+        "nom": "LC Création",
+        "montant": 4050000
+      },
+      {
+        "nom": "Partenaire",
+        "montant": 2700000
+      }
+    ]
+  },
+  "salles_chateau_nb_an": 30,
+  "salles_chateau_prix": 1500,
+  "cv_commission_cb_nuitee": 1.5,
+  "cv_commission_cb_pct_chambres": 0.8,
+  "cv_pdj_pct": 0.35,
+  "cv_salles_chateau_energie": 100.0,
+  "cv_salles_chateau_nettoyage": 500.0,
+  "personnel_evenements": [],
+  "fonds_propres_investisseurs": [
+    {
+      "nom": "LC Création",
+      "montant": 1000000
+    }
+  ],
+  "commentaire_rocher": "L'Immobilière Rocher porte l'ensemble des investissements immobiliers du projet. Ses revenus proviennent principalement du loyer facture au Chateau d'Argenteau et des intérêts perçus sur le prêt intra-groupe. Le résultat est impacté par les charges d'amortissement et le service de la dette externe. A terme, l'entité dégage un résultat positif croissant a mesure que la dette se rembourse tout en bénéficiant d'une trésorerie confortable.",
+  "commentaires": {
+    "after_graph_1": "test"
+  },
+  "commentaire_chateau": "Le Chateau d'Argenteau exploite un hotel de 70 chambres positionne en 4-5 etoiles. Le chiffre d'affaires est genere par l'hebergement, la brasserie, le bar, le spa et la location de salles. En regime de croisiere (taux d'occupation de 62%), le CA hebergement est estime a environ 3.4 M€. La masse salariale represente le poste de charge le plus important avec 42.3 ETP pour 2.33 M€/an. Le loyer verse a l'Immobiliere Rocher s'eleve a 1,440,000 €/an. Le plan vise un EBITDA positif des les premieres annees de croisiere et un retour sur investissement progressif.",
+  "delais_clients": {
+    "hebergement_Loisirs": 0,
+    "hebergement_Affaires": 0,
+    "hebergement_Groupes": 0,
+    "hebergement_MICE": 1,
+    "hebergement_Evenementiel": 1,
+    "brasserie": 0,
+    "bar": 0,
+    "spa": 0,
+    "salles": 1,
+    "divers": 0,
+    "loyer_restaurant": 1
+  },
+  "delais_fournisseurs": {
+    "cv_hebergement": 1,
+    "cv_brasserie": 1,
+    "cv_bar": 0,
+    "cv_spa": 1,
+    "cv_salles": 1,
+    "cv_divers": 1,
+    "cf_loyer": 0,
+    "cf_directs_hebergement": 0,
+    "cf_directs_brasserie": 0,
+    "cf_directs_spa": 0,
+    "cf_directs_evenements": 0,
+    "cf_autres_indirects": 0,
+    "Linge & blanchisserie": 1,
+    "Produits & consommables": 1,
+    "Energie variable": 1,
+    "Nourriture": 1,
+    "Boissons": 1,
+    "Commissions OTA": 0,
+    "Commissions CB & franchise": 0,
+    "Soins spa": 0,
+    "Evenements (nettoyage, materiel)": 1,
+    "Loyer": 0,
+    "CF directs departements": 0,
+    "Energie fixe": 1,
+    "Assurances & taxes": 0,
+    "Maintenance & contrats": 1,
+    "Marketing": 1,
+    "IT & logiciels": 0,
+    "Honoraires": 1,
+    "Autres CF indirects": 1
+  }
+}
