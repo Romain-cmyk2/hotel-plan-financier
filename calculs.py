@@ -906,6 +906,12 @@ def calc_charges_fixes_mensuelles(params, d: date, annee_idx: int):
         "cf_autres_brasserie": cf_autres_brass,
         "cf_autres_spa": cf_autres_spa,
         "cf_autres_evenements": cf_autres_events,
+        # CF directs par service (personnel + autres)
+        "cf_directs_hebergement": cf_pers_heberg_pl + cf_autres_heberg,
+        "cf_directs_brasserie": cf_pers_brass_pl + cf_autres_brass,
+        "cf_directs_bar": cf_pers_bar_pl,
+        "cf_directs_spa": cf_pers_spa_pl + cf_autres_spa,
+        "cf_directs_evenements": cf_pers_events_pl + cf_autres_events,
         # Detail CF indirectes par nature
         "_cfi_par_nature": _cfi_par_nature,
     }
@@ -1400,6 +1406,11 @@ def projection_complete(params):
             "cf_autres": cf["cf_autres"],
             "cf_autres_indirects": cf.get("cf_autres_indirects", 0),
             "cf_directs_total": cf.get("cf_directs_total", 0),
+            "cf_directs_hebergement": cf.get("cf_directs_hebergement", 0),
+            "cf_directs_brasserie": cf.get("cf_directs_brasserie", 0),
+            "cf_directs_bar": cf.get("cf_directs_bar", 0),
+            "cf_directs_spa": cf.get("cf_directs_spa", 0),
+            "cf_directs_evenements": cf.get("cf_directs_evenements", 0),
             "cf_indirects_total": cf.get("cf_indirects_total", 0),
             "cf_total": cf["cf_total"],
             "cf_total_cash": cf.get("cf_total_cash", cf["cf_total"]),

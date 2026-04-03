@@ -1280,15 +1280,15 @@ def tab_hypotheses(p):
             with c1:
                 st.markdown('<div class="section-header">\U0001F4BC Seminaires</div>', unsafe_allow_html=True)
                 p["seminaire_nb_an"] = st.number_input("Nb seminaires / an", 0, 200, p["seminaire_nb_an"], key="sem_nb")
-                p["seminaire_prix_location"] = st.number_input("Location salle (\u20ac)", 0, 5000, p["seminaire_prix_location"], step=50, key="sem_loc")
+                p["seminaire_prix_location"] = st.number_input("Location salle (\u20ac)", 0, 50000, p["seminaire_prix_location"], step=50, key="sem_loc")
             with c2:
                 st.markdown('<div class="section-header">\U0001F492 Mariages / Evenements</div>', unsafe_allow_html=True)
                 p["mariage_nb_an"] = st.number_input("Nb mariages / an", 0, 50, p["mariage_nb_an"], key="mar_nb")
-                p["mariage_prix_location"] = st.number_input("Location salle (\u20ac)", 0, 10000, p["mariage_prix_location"], step=100, key="mar_loc")
+                p["mariage_prix_location"] = st.number_input("Location salle (\u20ac)", 0, 50000, p["mariage_prix_location"], step=100, key="mar_loc")
             with c3:
                 st.markdown('<div class="section-header">\U0001F3F0 Salles du chateau</div>', unsafe_allow_html=True)
                 p["salles_chateau_nb_an"] = st.number_input("Nb locations / an", 0, 200, int(p.get("salles_chateau_nb_an", 30)), key="chateau_nb")
-                p["salles_chateau_prix"] = st.number_input("Prix moyen location (\u20ac)", 0, 10000, int(p.get("salles_chateau_prix", 1500)), step=100, key="chateau_prix")
+                p["salles_chateau_prix"] = st.number_input("Prix moyen location (\u20ac)", 0, 50000, int(p.get("salles_chateau_prix", 1500)), step=100, key="chateau_prix")
 
             charts["seminaires"] = st.container()
             charts["mariages"] = st.container()
@@ -3017,6 +3017,16 @@ def _export_pptx(indic, params, df, chapters):
                 min_m = mois_noms[saison.index(min_s)] if len(saison) == 12 else "?"
                 hyp_rows.append(["Saisonnalite (pic)", f"{max_m} ({max_s:.3f})"])
                 hyp_rows.append(["Saisonnalite (creux)", f"{min_m} ({min_s:.3f})"])
+            # Salles & Evenements
+            hyp_rows.append(["--- Salles & Evenements ---", ""])
+            hyp_rows.append(["Seminaires / an", str(params.get("seminaire_nb_an", 0))])
+            hyp_rows.append(["Location salle seminaire", f"{params.get('seminaire_prix_location', 0):,.0f} EUR"])
+            hyp_rows.append(["Mariages / an", str(params.get("mariage_nb_an", 0))])
+            hyp_rows.append(["Location salle mariage", f"{params.get('mariage_prix_location', 0):,.0f} EUR"])
+            hyp_rows.append(["Salles chateau / an", str(params.get("salles_chateau_nb_an", 0))])
+            hyp_rows.append(["Prix moyen location chateau", f"{params.get('salles_chateau_prix', 0):,.0f} EUR"])
+            hyp_rows.append(["CV chateau - Energie", f"{params.get('cv_salles_chateau_energie', 100):,.0f} EUR/loc."])
+            hyp_rows.append(["CV chateau - Nettoyage", f"{params.get('cv_salles_chateau_nettoyage', 500):,.0f} EUR/loc."])
             _add_table_slide("Hypotheses Cles", hyp_headers, hyp_rows)
 
         elif ch_key == "previsions_ca":
@@ -3256,6 +3266,16 @@ def _export_html(indic, params, df, chapters):
             for i, t in enumerate(taux_occ):
                 yr_label = f"Annee {i+1}" if i < len(taux_occ) - 1 else f"Annee {i+1}+"
                 hyp_rows.append([f"Taux occupation {yr_label}", f"{t*100:.1f}%"])
+            # Salles & Evenements
+            hyp_rows.append(["--- Salles & Evenements ---", ""])
+            hyp_rows.append(["Seminaires / an", str(params.get("seminaire_nb_an", 0))])
+            hyp_rows.append(["Location salle seminaire", f"{params.get('seminaire_prix_location', 0):,.0f} EUR"])
+            hyp_rows.append(["Mariages / an", str(params.get("mariage_nb_an", 0))])
+            hyp_rows.append(["Location salle mariage", f"{params.get('mariage_prix_location', 0):,.0f} EUR"])
+            hyp_rows.append(["Salles chateau / an", str(params.get("salles_chateau_nb_an", 0))])
+            hyp_rows.append(["Prix moyen location chateau", f"{params.get('salles_chateau_prix', 0):,.0f} EUR"])
+            hyp_rows.append(["CV chateau - Energie", f"{params.get('cv_salles_chateau_energie', 100):,.0f} EUR/loc."])
+            hyp_rows.append(["CV chateau - Nettoyage", f"{params.get('cv_salles_chateau_nettoyage', 500):,.0f} EUR/loc."])
             body += _html_table(["Parametre", "Valeur"], hyp_rows)
 
         elif ch_key == "previsions_ca":
@@ -3591,6 +3611,16 @@ def _export_pdf(indic, params, df, chapters):
             for i, t in enumerate(taux_occ):
                 yr_label = f"Annee {i+1}" if i < len(taux_occ) - 1 else f"Annee {i+1}+"
                 hyp_rows.append([f"Taux occupation {yr_label}", f"{t*100:.1f}%"])
+            # Salles & Evenements
+            hyp_rows.append(["--- Salles & Evenements ---", ""])
+            hyp_rows.append(["Seminaires / an", str(params.get("seminaire_nb_an", 0))])
+            hyp_rows.append(["Location salle seminaire", f"{params.get('seminaire_prix_location', 0):,.0f} EUR"])
+            hyp_rows.append(["Mariages / an", str(params.get("mariage_nb_an", 0))])
+            hyp_rows.append(["Location salle mariage", f"{params.get('mariage_prix_location', 0):,.0f} EUR"])
+            hyp_rows.append(["Salles chateau / an", str(params.get("salles_chateau_nb_an", 0))])
+            hyp_rows.append(["Prix moyen location chateau", f"{params.get('salles_chateau_prix', 0):,.0f} EUR"])
+            hyp_rows.append(["CV chateau - Energie", f"{params.get('cv_salles_chateau_energie', 100):,.0f} EUR/loc."])
+            hyp_rows.append(["CV chateau - Nettoyage", f"{params.get('cv_salles_chateau_nettoyage', 500):,.0f} EUR/loc."])
             _add_table(hyp_headers, hyp_rows)
 
         elif ch_key == "previsions_ca":
@@ -6217,8 +6247,15 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 5. Salles & Evenements
         st.markdown(f'**5. Salles & Evenements**', unsafe_allow_html=True)
         st.markdown(_tbl
-            + _r(f'Seminaires : <b>{p.get("seminaire_nb_an", 50)}/an</b> a {p.get("seminaire_prix_location", 800):,.0f} \u20ac', f'Energie : <b>{_cv_salles_energie:,.0f} \u20ac/loc.</b>', f'Personnel : <b>{_etp_e:.1f} ETP</b>')
-            + _r(f'Mariages : <b>{p.get("mariage_nb_an", 12)}/an</b> a {p.get("mariage_prix_location", 2500):,.0f} \u20ac', f'Nettoyage : <b>{_cv_salles_nett:,.0f} \u20ac/loc.</b>', f'Masse salariale : <b>{_masse_e:,.0f} \u20ac/an</b>')
+            + _r(f'Seminaires : <b>{p.get("seminaire_nb_an", 50)}/an</b> a {p.get("seminaire_prix_location", 800):,.0f} \u20ac',
+                f'Energie : <b>{p.get("cv_seminaire_energie", 75):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_seminaire_nettoyage", 500):,.0f} \u20ac</b> | Pause : <b>{p.get("cv_seminaire_pause_participant", 8):,.0f} \u20ac/pers</b>',
+                '')
+            + _r(f'Mariages : <b>{p.get("mariage_nb_an", 12)}/an</b> a {p.get("mariage_prix_location", 2500):,.0f} \u20ac',
+                f'Energie : <b>{p.get("cv_mariage_energie", 150):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_mariage_nettoyage", 1000):,.0f} \u20ac</b>',
+                '')
+            + _r(f'Salles chateau : <b>{p.get("salles_chateau_nb_an", 30)}/an</b> a {p.get("salles_chateau_prix", 1500):,.0f} \u20ac',
+                f'Energie : <b>{p.get("cv_salles_chateau_energie", 100):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_salles_chateau_nettoyage", 500):,.0f} \u20ac</b>',
+                '')
             + '</tbody></table>', unsafe_allow_html=True)
 
         # ── II. Frais fixes indirects ──
@@ -7129,6 +7166,12 @@ def main():
     # Calculs
     with st.spinner("Calcul de la projection..."):
         df = projection_complete(p)
+        # Marges mensuelles ventilees par service
+        df["marge_heberg"] = df["ca_hebergement"] - df["cv_hebergement"]
+        df["marge_brass"] = df["ca_brasserie"] - df["cv_brasserie"]
+        df["marge_bar"] = df["ca_bar"] - df["cv_bar"]
+        df["marge_spa"] = df["ca_spa"] - df["cv_spa"]
+        df["marge_salles"] = df["ca_salles"] - df["cv_salles"]
         st.session_state["_projection_df"] = df
         indic_expl = indicateurs_annuels(df, p, par_calendaire=False)
         indic = indicateurs_annuels(df, p, par_calendaire=True)
@@ -7151,8 +7194,11 @@ def main():
             "ca_total": "sum", "ca_hebergement": "sum", "ca_brasserie": "sum",
             "ca_bar": "sum", "ca_spa": "sum", "ca_salles": "sum",
             "cv_total": "sum", "cv_hebergement": "sum", "cv_brasserie": "sum",
-            "cv_bar": "sum", "cv_spa": "sum",
-            "cf_directs_total": "sum", "cf_indirects_total": "sum",
+            "cv_bar": "sum", "cv_spa": "sum", "cv_salles": "sum",
+            "cf_directs_total": "sum",
+            "cf_directs_hebergement": "sum", "cf_directs_brasserie": "sum",
+            "cf_directs_bar": "sum", "cf_directs_spa": "sum", "cf_directs_evenements": "sum",
+            "cf_indirects_total": "sum",
             "marge_brute": "sum", "marge": "sum", "subside_rw": "sum",
             "ebitda": "sum", "amortissement": "sum", "ebit": "sum",
             "dette_interets": "sum", "dette_capital": "sum",
@@ -7162,6 +7208,12 @@ def main():
             "cf_personnel": "sum", "cf_personnel_direct": "sum",
         }).reset_index()
         _x = [str(int(a)) for a in _ann["annee"]]
+        # Marges ventilees par service
+        _ann["marge_heberg"] = _ann["ca_hebergement"] - _ann["cv_hebergement"]
+        _ann["marge_brass"] = _ann["ca_brasserie"] - _ann["cv_brasserie"]
+        _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"]
+        _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"]
+        _ann["marge_salles"] = _ann["ca_salles"] - _ann["cv_salles"]
 
         def _proj_chart(title, traces_config, key_id, height=450, barmode="stack",
                         show_totals=False, total_col=None, extra_lines=None):
@@ -7227,12 +7279,16 @@ def main():
                 ("cv_bar","Bar","#ffcc00"),("cv_spa","Spa","#11998e"),
             ], "cv_svc", show_totals=True, total_col="cv_total")
 
-            _proj_chart("Frais fixes directs", [
-                ("cf_directs_total","CF Directs","#764ba2"),
-            ], "cfd")
+            _proj_chart("Frais fixes directs par service", [
+                ("cf_directs_hebergement","Hebergement","#667eea"),("cf_directs_brasserie","Brasserie","#f5576c"),
+                ("cf_directs_bar","Bar","#ffcc00"),("cf_directs_spa","Spa","#11998e"),
+                ("cf_directs_evenements","Evenements","#a0522d"),
+            ], "cfd", show_totals=True, total_col="cf_directs_total")
 
             _proj_chart("Marge par service + Subside", [
-                ("marge","Marge service","#38ef7d"),("subside_rw","Subside RW","#ffcc00"),
+                ("marge_heberg","Hebergement","#667eea"),("marge_brass","Brasserie","#f5576c"),
+                ("marge_bar","Bar","#ffcc00"),("marge_spa","Spa","#11998e"),
+                ("marge_salles","Salles","#a0522d"),("subside_rw","Subside RW","#f093fb"),
             ], "marge_svc")
 
             st.markdown("### Compte de resultat")
