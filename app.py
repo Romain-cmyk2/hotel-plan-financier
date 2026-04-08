@@ -6718,13 +6718,13 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             range=[0, max(_cf_dir_k)*1.18] if len(_cf_dir_k)>0 else None), legend=_leg)
         _show_fig(fig, key="ch_cf_dir_hyp")
 
-        # Marge par service + Subside
+        # Marge par service + Subside (marge = ventes - CV - frais fixes directs)
         fig = go.Figure()
-        _ann["marge_heberg"] = _ann["ca_hebergement"] - _ann["cv_hebergement"]
-        _ann["marge_brass"] = _ann["ca_brasserie"] - _ann["cv_brasserie"]
-        _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"]
-        _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"]
-        _ann["marge_salles"] = _ann["ca_salles"]
+        _ann["marge_heberg"] = _ann["ca_hebergement"] - _ann["cv_hebergement"] - _ann.get("cf_directs_hebergement", 0)
+        _ann["marge_brass"] = _ann["ca_brasserie"] - _ann["cv_brasserie"] - _ann.get("cf_directs_brasserie", 0)
+        _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"] - _ann.get("cf_directs_bar", 0)
+        _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"] - _ann.get("cf_directs_spa", 0)
+        _ann["marge_salles"] = _ann["ca_salles"] - _ann.get("cf_directs_evenements", 0)
         _ann["marge_resto"] = _ann.get("ca_loyer_restaurant", 0)
         _marge_services_hyp = [("marge_heberg","Hebergement","#667eea"),("marge_brass","Brasserie","#f5576c"),
             ("marge_bar","Bar","#ffcc00"),("marge_spa","Spa","#11998e"),("marge_salles","Salles","#a0522d"),
@@ -6740,7 +6740,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f", range=[0, _max_mh * 1.5]), legend=_leg)
         _show_fig(fig, key="ch_marge_hyp")
 
-        # Camembert repartition marges (cumul)
+        # Camembert repartition marges (cumul) — marge = ventes - CV - frais fixes directs
         _marge_cumul_hyp = {
             "Hebergement": _ann["marge_heberg"].sum(),
             "Brasserie": _ann["marge_brass"].sum(),
@@ -6756,8 +6756,8 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             fig = go.Figure(data=[go.Pie(
                 labels=list(_marge_cumul_hyp.keys()), values=list(_marge_cumul_hyp.values()),
                 marker=dict(colors=[_mc_colors.get(k, "#888") for k in _marge_cumul_hyp]),
-                textinfo="label+percent+value",
-                texttemplate="<b>%{label}</b><br><b>%{value:,.0f} K\u20ac</b><br>(%{percent})",
+                textinfo="label+percent",
+                texttemplate="<b>%{label}</b><br>%{percent}",
                 textfont=dict(size=13), hole=0.3, pull=[0.02]*len(_marge_cumul_hyp),
             )])
             fig.update_layout(title="Repartition des marges par service (cumul)", height=450,
