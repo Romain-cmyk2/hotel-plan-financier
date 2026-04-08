@@ -6892,8 +6892,8 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _rn_k = K(_ann["resultat_net"])
         fig = go.Figure()
         fig.add_trace(go.Bar(x=_x, y=_ebitda_k, name="EBITDA", marker_color="#11998e"))
-        fig.add_trace(go.Bar(x=_x, y=_amort_k, name="Amortissement", marker_color="#764ba2"))
-        fig.add_trace(go.Bar(x=_x, y=_int_k, name="Interets", marker_color="#ffcc00"))
+        fig.add_trace(go.Bar(x=_x, y=-_amort_k, name="Amortissement", marker_color="#764ba2"))
+        fig.add_trace(go.Bar(x=_x, y=-_int_k, name="Interets", marker_color="#ffcc00"))
         # Labels EBITDA au dessus des barres
         fig.add_trace(go.Scatter(x=_x, y=_ebitda_k, mode="text",
             text=[f"<b>{v:,.0f}</b>" for v in _ebitda_k], textposition="top center",
