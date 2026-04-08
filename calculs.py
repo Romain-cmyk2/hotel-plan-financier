@@ -520,12 +520,15 @@ def calc_revenus_mensuels(params, d: date, annee_idx: int):
     ca_divers = (params.get("divers_prix_nuitee", 3) *
                  params.get("divers_taux", 1.0) * nuitees * infl_ventes)
 
+    # Rattacher ca_divers au service hebergement (revenus annexes lies aux nuitees)
+    ca_hebergement += ca_divers
+
     # ── Loyer Restaurant gastronomique ──
     ca_loyer_restaurant = params.get("loyer_restaurant_mensuel", 5800) * infl_loyer_rest
 
     # ── CA TOTAL ──
     ca_total = (ca_hebergement + ca_brasserie + ca_bar + ca_spa +
-                ca_salles + ca_divers + ca_loyer_restaurant)
+                ca_salles + ca_loyer_restaurant)
 
     # CA hebergement ventile par segment (pour delais de paiement)
     hausse_mult = 1.0
