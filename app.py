@@ -6560,9 +6560,10 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             textfont=dict(size=11, color="#1a1a2e"),
             hovertemplate="%{x} : %{y:.3f}<extra></extra>"))
         fig_saison.add_hline(y=1.0, line_dash="dash", line_color="#888", opacity=0.5)
-        fig_saison.update_layout(title="Coefficients de saisonnalite mensuelle", height=320,
-            xaxis=dict(type="category"), yaxis=dict(range=[0, max(_saison)*1.15], title="Coefficient"),
-            margin=dict(l=40, r=20, t=40, b=30))
+        fig_saison.update_layout(title="Coefficients de saisonnalite mensuelle", height=350,
+            xaxis=dict(type="category", range=[-0.5, 11.8]),
+            yaxis=dict(range=[0, max(_saison)*1.2], title="Coefficient"),
+            margin=dict(l=40, r=60, t=40, b=30))
         _show_fig(fig_saison, key="ch_saisonnalite")
 
         # Graphiques nuitees et taux occupation / ADR / RevPAR
