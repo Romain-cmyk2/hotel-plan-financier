@@ -5881,8 +5881,11 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         for inv in _fp_inv_ch_m:
             _acteurs_s1.setdefault(inv["nom"], {"cap_ro": 0, "cap_ch": 0})
             _acteurs_s1[inv["nom"]]["cap_ch"] += inv["montant"]
-        _t_ro_std = sum(pr["montant"] for pr in prets_ro if not pr.get("subside_rw"))
+        # Prets bancaires vs partenaires (distinguer par creancier)
+        _t_ro_std = sum(pr["montant"] for pr in prets_ro if not pr.get("subside_rw") and pr.get("creancier", "Banque") == "Banque")
         _t_ro_rw = sum(pr["montant"] for pr in prets_ro if pr.get("subside_rw"))
+        _prets_ro_partenaires = [(pr["nom"], pr["montant"], pr.get("creancier", "")) for pr in prets_ro
+                                  if not pr.get("subside_rw") and pr.get("creancier", "Banque") != "Banque"]
         _t_ch_std = sum(pr["montant"] for pr in prets_ch if not pr.get("subside_rw") and "rocher" not in pr.get("nom","").lower())
         _t_ch_rw = sum(pr["montant"] for pr in prets_ch if pr.get("subside_rw"))
 
@@ -5990,6 +5993,14 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             _sx, _sy, _ex, _ey = _bk_x - 1.5, 8.2, 2.5, 3.5
             _arrow(_sx, _sy, _ex, _ey, "Pret garanti RW", _t_ro_rw, "#f39c12",
                    lx=(_sx + _ex) / 2 - 1.5, ly=(_sy + _ey) / 2 + 0.4)
+
+        # Fleches prets partenaires → Rocher
+        for _pr_nom, _pr_mt, _pr_creancier in _prets_ro_partenaires:
+            if _pr_creancier in _act_positions:
+                _sx = _act_positions[_pr_creancier]
+                _ex, _ey = 5, 3.5
+                _arrow(_sx, 8.2, _ex, _ey, _pr_nom, _pr_mt, _act_colors.get(_pr_creancier, "#2980b9"),
+                       lx=_sx + (_ex - _sx) * 0.4, ly=8.2 + (_ey - 8.2) * 0.4 + 0.4)
 
         # Fleches bancaires → Argenteau (labels proches de leur fleche, decales en y)
         if _t_ch_rw > 0:
