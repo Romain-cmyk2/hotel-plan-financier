@@ -5712,6 +5712,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _ann = df_rpt.groupby("annee").agg({
             "ca_total": "sum", "ca_hebergement": "sum", "ca_brasserie": "sum",
             "ca_bar": "sum", "ca_spa": "sum", "ca_salles": "sum",
+            "ca_loyer_restaurant": "sum", "ca_divers": "sum",
             "cv_total": "sum", "cv_hebergement": "sum", "cv_brasserie": "sum",
             "cv_bar": "sum", "cv_spa": "sum",
             "cf_directs_total": "sum", "cf_indirects_total": "sum",
@@ -5799,34 +5800,275 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _cmt("before_s1_montage")
         st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
                     '1. Montage financier</h2>', unsafe_allow_html=True)
-        _cmt("after_s1_montage_title")
 
+        _prets_ro_std = [pr for pr in prets_ro if not pr.get("subside_rw")]
+        _prets_ro_rw = [pr for pr in prets_ro if pr.get("subside_rw")]
+        _prets_ch_std = [pr for pr in prets_ch if not pr.get("subside_rw")]
+        _prets_ch_rw = [pr for pr in prets_ch if pr.get("subside_rw")]
+
+        # En-tetes entites
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("### Immobiliere Rocher")
+        with c2:
+            st.markdown("### Chateau d'Argenteau")
+
+        # Fonds propres (aligne)
+        c1, c2 = st.columns(2)
+        with c1:
             st.markdown(f"**Fonds propres : {fp_ro:,.0f} \u20ac**")
             for inv in rd.get("fonds_propres_investisseurs", []):
                 st.markdown(f"- {inv['nom']} : {inv['montant']:,.0f} \u20ac")
-            st.markdown("**Dettes :**")
-            for pr in prets_ro:
-                sub = " \U0001F7E2 Subside RW" if pr.get("subside_rw") else ""
-                st.markdown(f"- {pr['nom']} ({pr.get('creancier','')}) : **{pr['montant']:,.0f} \u20ac** "
-                            f"@ {pr['taux_annuel']:.1%} / {pr['duree_ans']} ans{sub}")
         with c2:
-            st.markdown("### Chateau d'Argenteau")
             st.markdown(f"**Fonds propres : {fp_ch:,.0f} \u20ac**")
             for inv in p.get("fonds_propres_investisseurs", []):
                 st.markdown(f"- {inv['nom']} : {inv['montant']:,.0f} \u20ac")
-            st.markdown("**Dettes :**")
-            for pr in prets_ch:
-                sub = " \U0001F7E2 Subside RW" if pr.get("subside_rw") else ""
-                st.markdown(f"- {pr['nom']} : **{pr['montant']:,.0f} \u20ac** "
-                            f"@ {pr['taux_annuel']:.1%} / {pr['duree_ans']} ans{sub}")
 
-        # 2b. Injection par acteur
-        _cmt("before_s2_injection")
+        # Dettes bancaires (aligne)
+        c1, c2 = st.columns(2)
+        with c1:
+            if _prets_ro_std:
+                st.markdown("**Dettes bancaires :**")
+                for pr in _prets_ro_std:
+                    st.markdown(f"- {pr['nom']} ({pr.get('creancier','')}) : **{pr['montant']:,.0f} \u20ac** "
+                                f"@ {pr['taux_annuel']:.1%} / {pr['duree_ans']} ans")
+        with c2:
+            if _prets_ch_std:
+                st.markdown("**Dettes bancaires :**")
+                for pr in _prets_ch_std:
+                    st.markdown(f"- {pr['nom']} : **{pr['montant']:,.0f} \u20ac** "
+                                f"@ {pr['taux_annuel']:.1%} / {pr['duree_ans']} ans")
+
+        # Dettes garanties RW (aligne)
+        c1, c2 = st.columns(2)
+        with c1:
+            if _prets_ro_rw:
+                st.markdown("**Dettes garanties Region Wallonne :**")
+                for pr in _prets_ro_rw:
+                    st.markdown(f"- \U0001F7E2 {pr['nom']} ({pr.get('creancier','')}) : **{pr['montant']:,.0f} \u20ac** "
+                                f"@ {pr['taux_annuel']:.1%} / {pr['duree_ans']} ans — *Subside RW*")
+        with c2:
+            if _prets_ch_rw:
+                st.markdown("**Dettes garanties Region Wallonne :**")
+                for pr in _prets_ch_rw:
+                    st.markdown(f"- \U0001F7E2 {pr['nom']} : **{pr['montant']:,.0f} \u20ac** "
+                                f"@ {pr['taux_annuel']:.1%} / {pr['duree_ans']} ans — *Subside RW*")
+
+        # Schema du montage financier (dans section 1)
+        st.markdown("---")
+        _nf = lambda v: f"{v:,.0f}".replace(",", " ")
+        _fp_ro_m = rd.get("fonds_propres_initial", 0)
+        _fp_inv_ro_m = rd.get("fonds_propres_investisseurs", [])
+        _fp_inv_ch_m = p.get("fonds_propres_investisseurs", [])
+        _pret_rocher_ch_s1 = next((pr for pr in prets_ch if "rocher" in pr.get("nom","").lower()), None)
+        _pret_ro_ch_mt = _pret_rocher_ch_s1["montant"] if _pret_rocher_ch_s1 else 0
+        _loyer_m_s1 = p.get("loyer_mensuel", 0)
+
+        # Collecter acteurs et prets
+        _acteurs_s1 = {}
+        for inv in _fp_inv_ro_m:
+            _acteurs_s1.setdefault(inv["nom"], {"cap_ro": 0, "cap_ch": 0})
+            _acteurs_s1[inv["nom"]]["cap_ro"] += inv["montant"]
+        for inv in _fp_inv_ch_m:
+            _acteurs_s1.setdefault(inv["nom"], {"cap_ro": 0, "cap_ch": 0})
+            _acteurs_s1[inv["nom"]]["cap_ch"] += inv["montant"]
+        _t_ro_std = sum(pr["montant"] for pr in prets_ro if not pr.get("subside_rw"))
+        _t_ro_rw = sum(pr["montant"] for pr in prets_ro if pr.get("subside_rw"))
+        _t_ch_std = sum(pr["montant"] for pr in prets_ch if not pr.get("subside_rw") and "rocher" not in pr.get("nom","").lower())
+        _t_ch_rw = sum(pr["montant"] for pr in prets_ch if pr.get("subside_rw"))
+
+        # Plotly montage schematique — canvas large pour eviter superposition
+        _fig_m = go.Figure()
+        _fig_m.update_xaxes(range=[-1, 19], showgrid=False, zeroline=False, visible=False, fixedrange=True)
+        _fig_m.update_yaxes(range=[-0.5, 10], showgrid=False, zeroline=False, visible=False, fixedrange=True)
+
+        _act_colors = {"LC Cr\u00e9ation": "#e67e22", "Partenaire": "#2980b9"}
+        _def_c = ["#e67e22", "#2980b9", "#9b59b6", "#1abc9c"]
+        _act_list = list(_acteurs_s1.items())
+        _n_act = len(_act_list)
+
+        # Positions acteurs en haut (espaces regulierement)
+        _act_positions = {}
+        _act_spacing = min(5, 14 / max(_n_act, 1))
+        for idx, (nom, _) in enumerate(_act_list):
+            if nom not in _act_colors:
+                _act_colors[nom] = _def_c[idx % len(_def_c)]
+            cx = 2 + idx * _act_spacing
+            _act_positions[nom] = cx
+            _fig_m.add_shape(type="rect", x0=cx - 1.8, y0=8.2, x1=cx + 1.8, y1=9.5,
+                             fillcolor=_act_colors[nom], line=dict(width=0), layer="below")
+            _fig_m.add_annotation(x=cx, y=8.85, text=f"<b>{nom}</b>", showarrow=False,
+                                  font=dict(size=12, color="white"))
+
+        # Banque (haut droite)
+        _bk_x = 15.5
+        _fig_m.add_shape(type="rect", x0=_bk_x - 2, y0=8.2, x1=_bk_x + 2, y1=9.5,
+                         fillcolor="#1a3a5c", line=dict(width=0), layer="below")
+        _fig_m.add_annotation(x=_bk_x, y=8.85, text="<b>BANQUE</b>", showarrow=False,
+                              font=dict(size=12, color="white"))
+
+        # ROCHER (bas gauche)
+        _ro_cx, _ro_cy = 4, 2
+        _fig_m.add_shape(type="rect", x0=0, y0=0.5, x1=8, y1=3.5,
+                         fillcolor="#27ae60", line=dict(width=0), layer="below")
+        _fig_m.add_annotation(x=_ro_cx, y=2.7, text="<b>ROCHER</b>", showarrow=False,
+                              font=dict(size=16, color="white"))
+        _fig_m.add_annotation(x=_ro_cx, y=2.1, text="<i>Societe Immobiliere</i>", showarrow=False,
+                              font=dict(size=10, color="rgba(255,255,255,0.8)"))
+        _fig_m.add_shape(type="rect", x0=0.8, y0=0.65, x1=7.2, y1=1.3,
+                         fillcolor="#f1c40f", line=dict(width=0), layer="below")
+        _fig_m.add_annotation(x=_ro_cx, y=0.97, text=f"<b>Capital : {_nf(_fp_ro_m)} \u20ac</b>",
+                              showarrow=False, font=dict(size=11, color="#333"))
+
+        # ARGENTEAU (bas droite)
+        _ag_cx, _ag_cy = 14, 2
+        _fig_m.add_shape(type="rect", x0=10, y0=0.5, x1=18, y1=3.5,
+                         fillcolor="#8e44ad", line=dict(width=0), layer="below")
+        _fig_m.add_annotation(x=_ag_cx, y=2.7, text="<b>ARGENTEAU</b>", showarrow=False,
+                              font=dict(size=16, color="white"))
+        _fig_m.add_annotation(x=_ag_cx, y=2.1, text="<i>Societe d'Exploitation</i>", showarrow=False,
+                              font=dict(size=10, color="rgba(255,255,255,0.8)"))
+        _fig_m.add_shape(type="rect", x0=10.8, y0=0.65, x1=17.2, y1=1.3,
+                         fillcolor="#f1c40f", line=dict(width=0), layer="below")
+        _fig_m.add_annotation(x=_ag_cx, y=0.97, text=f"<b>Capital : {_nf(fp_ch)} \u20ac</b>",
+                              showarrow=False, font=dict(size=11, color="#333"))
+
+        # Fleche helper — label place a une position explicite (lx, ly)
+        def _arrow(x0, y0, x1, y1, label, montant, color, lx=None, ly=None):
+            _fig_m.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y",
+                                  showarrow=True, arrowhead=2, arrowsize=1.5, arrowwidth=2.5,
+                                  arrowcolor=color, opacity=0.85, standoff=2, startstandoff=2)
+            if lx is None:
+                lx = (x0 + x1) / 2
+            if ly is None:
+                ly = (y0 + y1) / 2
+            _fig_m.add_annotation(x=lx, y=ly,
+                                  text=f"<b>{label}</b><br>{_nf(montant)} \u20ac",
+                                  showarrow=False, font=dict(size=9, color=color),
+                                  bgcolor="white", bordercolor=color, borderwidth=1, borderpad=3)
+
+        # Fleches capital acteurs → Rocher
+        _ro_idx = 0
+        for nom, data in _acteurs_s1.items():
+            if data["cap_ro"] > 0:
+                c = _act_colors[nom]
+                pct = data["cap_ro"] / _fp_ro_m * 100 if _fp_ro_m > 0 else 0
+                x_arr = 1.5 + _ro_idx * 3
+                sx = _act_positions[nom]
+                # Label au 1/3 de la fleche (pres du depart)
+                _arrow(sx, 8.2, x_arr, 3.5, f"Capital ({pct:.0f}%)", data["cap_ro"], c,
+                       lx=sx + (x_arr - sx) * 0.25, ly=8.2 + (3.5 - 8.2) * 0.25 + 0.4)
+                _ro_idx += 1
+
+        # Fleches capital acteurs → Argenteau (labels au 1/3 pres du depart)
+        _ag_idx = 0
+        for nom, data in _acteurs_s1.items():
+            if data["cap_ch"] > 0:
+                c = _act_colors[nom]
+                pct = data["cap_ch"] / fp_ch * 100 if fp_ch > 0 else 0
+                x_arr = 11.5 + _ag_idx * 2.5
+                sx = _act_positions[nom]
+                _arrow(sx, 8.2, x_arr, 3.5, f"Capital ({pct:.0f}%)", data["cap_ch"], c,
+                       lx=sx + (x_arr - sx) * 0.3, ly=8.2 + (3.5 - 8.2) * 0.3 + 0.4)
+                _ag_idx += 1
+
+        # Fleches bancaires → Rocher
+        if _t_ro_std > 0:
+            _sx, _sy, _ex, _ey = _bk_x - 0.5, 8.2, 6, 3.5
+            _arrow(_sx, _sy, _ex, _ey, "Pret LT", _t_ro_std, "#e74c3c",
+                   lx=(_sx + _ex) / 2 + 0.5, ly=(_sy + _ey) / 2 + 0.4)
+        if _t_ro_rw > 0:
+            _sx, _sy, _ex, _ey = _bk_x - 1.5, 8.2, 2.5, 3.5
+            _arrow(_sx, _sy, _ex, _ey, "Pret garanti RW", _t_ro_rw, "#f39c12",
+                   lx=(_sx + _ex) / 2 - 1.5, ly=(_sy + _ey) / 2 + 0.4)
+
+        # Fleches bancaires → Argenteau (labels proches de leur fleche, decales en y)
+        if _t_ch_rw > 0:
+            _sx, _sy, _ex, _ey = _bk_x + 1.5, 8.2, 12.5, 3.5
+            _arrow(_sx, _sy, _ex, _ey, "Pret garanti RW", _t_ch_rw, "#f39c12",
+                   lx=_sx + (_ex - _sx) * 0.6, ly=_sy + (_ey - _sy) * 0.6 + 0.4)
+        if _t_ch_std > 0:
+            _sx, _sy, _ex, _ey = _bk_x + 0.5, 8.2, 16, 3.5
+            _arrow(_sx, _sy, _ex, _ey, "Pret LT", _t_ch_std, "#e74c3c",
+                   lx=_sx + (_ex - _sx) * 0.7, ly=_sy + (_ey - _sy) * 0.7 + 0.4)
+
+        # Pret subordonne Rocher → Argenteau
+        if _pret_ro_ch_mt > 0:
+            _fig_m.add_annotation(x=10, y=2.6, ax=8, ay=2.6, xref="x", yref="y", axref="x", ayref="y",
+                                  showarrow=True, arrowhead=2, arrowsize=1.5, arrowwidth=2,
+                                  arrowcolor="#27ae60", opacity=0.8, standoff=2, startstandoff=2)
+            _fig_m.add_annotation(x=9, y=3.1,
+                                  text=f"<b>Pret subordonne</b><br>{_nf(_pret_ro_ch_mt)} \u20ac",
+                                  showarrow=False, font=dict(size=9, color="#27ae60"),
+                                  bgcolor="#e8f8f5", bordercolor="#27ae60", borderwidth=1, borderpad=3)
+
+        # Bail commercial — ligne pointillee Argenteau → Rocher
+        _fig_m.add_shape(type="line", x0=10, y0=1.8, x1=8, y1=1.8,
+                         line=dict(color="#c0392b", width=2, dash="dash"), layer="above")
+        # Petit coude vers le bas pour symboliser le paiement
+        _fig_m.add_shape(type="line", x0=8, y0=1.8, x1=8, y1=1.3,
+                         line=dict(color="#c0392b", width=2, dash="dash"), layer="above")
+        _fig_m.add_annotation(x=9, y=1.3,
+                              text=f"<b>Bail Commercial</b><br>{_nf(_loyer_m_s1)} \u20ac/mois",
+                              showarrow=False, font=dict(size=9, color="#c0392b"),
+                              bgcolor="#fef9e7", bordercolor="#c0392b", borderwidth=1, borderpad=3)
+
+        _fig_m.update_layout(height=600, margin=dict(l=0, r=0, t=5, b=0),
+                             plot_bgcolor="white", paper_bgcolor="white", dragmode=False)
+        st.plotly_chart(_fig_m, use_container_width=True, config={"displayModeBar": False})
+
+        # 2. Repartition du capital social
+        _cmt("before_s2_capital")
         st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
-                    '2. Injection par acteur</h2>', unsafe_allow_html=True)
+                    '2. Repartition du capital social</h2>', unsafe_allow_html=True)
+
+        _c_cap1, _c_cap2 = st.columns(2)
+        with _c_cap1:
+            st.markdown("#### Immobiliere Rocher")
+            _fp_inv_ro = rd.get("fonds_propres_investisseurs", [])
+            if _fp_inv_ro:
+                _cap_labels_ro = [inv["nom"] for inv in _fp_inv_ro]
+                _cap_values_ro = [inv["montant"] for inv in _fp_inv_ro]
+                _fig_cap_ro = go.Figure(data=[go.Pie(
+                    labels=_cap_labels_ro, values=_cap_values_ro,
+                    marker=dict(colors=["#e67e22", "#2980b9", "#27ae60", "#8e44ad"][:len(_cap_labels_ro)]),
+                    textinfo="label+percent+value",
+                    texttemplate="<b>%{label}</b><br><b>%{value:,.0f} \u20ac</b><br>(%{percent})",
+                    textfont=dict(size=14),
+                    hole=0.3,
+                    pull=[0.03] * len(_cap_labels_ro),
+                )])
+                _fig_cap_ro.update_layout(height=380, showlegend=False, margin=dict(l=10, r=10, t=40, b=10),
+                                          title=dict(text=f"Capital : {sum(_cap_values_ro):,.0f} \u20ac", font=dict(size=15)))
+                _show_fig(_fig_cap_ro)
+            else:
+                st.info(f"Fonds propres : **{rd.get('fonds_propres_initial', 0):,.0f} \u20ac**")
+
+        with _c_cap2:
+            st.markdown("#### Chateau d'Argenteau")
+            _fp_inv_ch = p.get("fonds_propres_investisseurs", [])
+            if _fp_inv_ch:
+                _cap_labels_ch = [inv["nom"] for inv in _fp_inv_ch]
+                _cap_values_ch = [inv["montant"] for inv in _fp_inv_ch]
+                _fig_cap_ch = go.Figure(data=[go.Pie(
+                    labels=_cap_labels_ch, values=_cap_values_ch,
+                    marker=dict(colors=["#e67e22", "#2980b9", "#27ae60", "#8e44ad"][:len(_cap_labels_ch)]),
+                    textinfo="label+percent+value",
+                    texttemplate="<b>%{label}</b><br><b>%{value:,.0f} \u20ac</b><br>(%{percent})",
+                    textfont=dict(size=14),
+                    hole=0.3,
+                    pull=[0.03] * len(_cap_labels_ch),
+                )])
+                _fig_cap_ch.update_layout(height=380, showlegend=False, margin=dict(l=10, r=10, t=40, b=10),
+                                          title=dict(text=f"Capital : {sum(_cap_values_ch):,.0f} \u20ac", font=dict(size=15)))
+                _show_fig(_fig_cap_ch)
+            else:
+                st.info(f"Fonds propres : **{fp_ch:,.0f} \u20ac**")
+
+        # 3. Injection par acteur
+        _cmt("before_s3_injection")
+        st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
+                    '3. Injection par acteur</h2>', unsafe_allow_html=True)
         st.caption("Recap des montants finances par acteur externe (hors Immobiliere Rocher et Chateau d'Argenteau)")
 
         # Collecter tous les acteurs et montants
@@ -5867,34 +6109,23 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
 
         # Camembert
         if _injections and total_inject > 0:
-            _colors_inj = ["#667eea", "#f5576c", "#11998e", "#ffcc00", "#a0522d", "#764ba2", "#38ef7d", "#f093fb"]
+            _colors_inj = ["#e67e22", "#2980b9", "#e74c3c", "#f39c12", "#27ae60", "#8e44ad", "#1abc9c", "#f093fb"]
             fig_inj = go.Figure(data=[go.Pie(
                 labels=list(_injections.keys()),
                 values=list(_injections.values()),
                 marker=dict(colors=_colors_inj[:len(_injections)]),
                 textinfo="label+percent+value",
-                texttemplate="%{label}<br>%{value:,.0f} \u20ac<br>(%{percent})",
-                textfont=dict(size=12),
+                texttemplate="<b>%{label}</b><br><b>%{value:,.0f} \u20ac</b><br>(%{percent})",
+                textfont=dict(size=13),
+                pull=[0.02] * len(_injections),
             )])
-            fig_inj.update_layout(height=700, showlegend=False, margin=dict(l=40, r=40, t=20, b=20))
+            fig_inj.update_layout(height=500, showlegend=False, margin=dict(l=30, r=30, t=20, b=20))
             _show_fig(fig_inj, large=True)
 
-        # 3. Recap flux
-        _cmt("before_s3_flux")
-        st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
-                    '3. Flux entre entites</h2>', unsafe_allow_html=True)
-        loyer_m = p.get("loyer_mensuel", 0)
-        pret_rocher_ch = next((pr for pr in prets_ch if "rocher" in pr.get("nom","").lower()), None)
-        st.markdown(f"- **Rocher → Chateau** : Pret de **{pret_rocher_ch['montant']:,.0f} \u20ac**" if pret_rocher_ch else "")
-        st.markdown(f"- **Chateau → Rocher** : Loyer de **{loyer_m:,.0f} \u20ac/mois** ({loyer_m*12:,.0f} \u20ac/an)")
-        if pret_rocher_ch:
-            int_m = pret_rocher_ch["montant"] * pret_rocher_ch["taux_annuel"] / 12
-            st.markdown(f"- **Chateau → Rocher** : Interets pret de **{int_m:,.0f} \u20ac/mois**")
-
         # ════════════════════════════════════════════════════════════════════
-        # 3b. INVESTISSEMENTS INITIAUX
+        # 4. INVESTISSEMENTS INITIAUX
         # ════════════════════════════════════════════════════════════════════
-        _cmt("before_s4_investissements")
+        _pret_rocher_ch = next((pr for pr in prets_ch if "rocher" in pr.get("nom","").lower()), None)
         st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
                     '4. Investissements initiaux</h2>', unsafe_allow_html=True)
 
@@ -5902,32 +6133,105 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _inv_rocher = rd.get("investissements", [])
         _inv_chateau = p.get("investissements", [])
 
+        _tot_inv_ro = sum(inv["montant"] for inv in _inv_rocher)
+        _tot_inv_ch = sum(inv["montant"] for inv in _inv_chateau)
+
         c_inv1, c_inv2 = st.columns(2)
         with c_inv1:
             st.markdown("#### Immobiliere Rocher")
-            _tot_inv_ro = 0
             for inv in _inv_rocher:
                 st.markdown(f"- {inv['categorie']} : **{inv['montant']:,.0f} \u20ac** "
                             f"(amort. {inv['duree_amort']} ans)")
-                _tot_inv_ro += inv["montant"]
-            st.markdown(f"\n**Total Rocher : {_tot_inv_ro:,.0f} \u20ac**")
         with c_inv2:
             st.markdown("#### Chateau d'Argenteau")
-            _tot_inv_ch = 0
             for inv in _inv_chateau:
                 st.markdown(f"- {inv['categorie']} : **{inv['montant']:,.0f} \u20ac** "
                             f"(amort. {inv['duree_amort']} ans)")
-                _tot_inv_ch += inv["montant"]
-            st.markdown(f"\n**Total Chateau : {_tot_inv_ch:,.0f} \u20ac**")
+
+        c_t1, c_t2 = st.columns(2)
+        with c_t1:
+            st.markdown(f"**Total Rocher : {_tot_inv_ro:,.0f} \u20ac**")
+        with c_t2:
+            st.markdown(f"**Total Chateau : {_tot_inv_ch:,.0f} \u20ac**")
 
         st.markdown(f"### Total investissements : {_tot_inv_ro + _tot_inv_ch:,.0f} \u20ac")
 
         # ════════════════════════════════════════════════════════════════════
-        # 5. PLAN FINANCIER ROCHER
+        # 7. MOYENS & BESOINS
         # ════════════════════════════════════════════════════════════════════
-        _cmt("before_s5_rocher")
+        _cmt("before_s6_moyens_besoins")
+        st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
+                    '5. Moyens &amp; Besoins</h2>', unsafe_allow_html=True)
+
+        # Donnees Chateau
+        _total_inv_ch_mb = sum(i["montant"] for i in p.get("investissements", []))
+        _prets_ch_mb = p.get("prets", [])
+        _total_prets_ch_mb = sum(pr["montant"] for pr in _prets_ch_mb)
+        _fp_ch_mb = p.get("fonds_propres_initial", 0)
+        _besoin_treso_ch = 0
+        if "_projection_df" in st.session_state:
+            _df_proj = st.session_state["_projection_df"]
+            _cf_cum = _df_proj["cash_flow"].cumsum()
+            _besoin_treso_ch = abs(min(0, _cf_cum.min()))
+        _total_moyens_ch_mb = _total_prets_ch_mb + _fp_ch_mb
+        _total_besoins_ch_mb = _total_inv_ch_mb + _besoin_treso_ch
+        _solde_ch_mb = _total_moyens_ch_mb - _total_besoins_ch_mb
+
+        # Donnees Rocher
+        _rocher_prets_mb = rd.get("prets", [])
+        _rocher_fp_mb = rd.get("fonds_propres_initial", 0)
+        _total_dettes_r_mb = sum(pr["montant"] for pr in _rocher_prets_mb)
+        _total_moyens_r_mb = _total_dettes_r_mb + _rocher_fp_mb
+        _rocher_inv_mb = rd.get("investissements", [])
+        _total_inv_r_mb = sum(inv["montant"] for inv in _rocher_inv_mb)
+        _pret_au_ch_mb = _pret_rocher_ch["montant"] if _pret_rocher_ch else 0
+        _total_besoins_r_mb = _total_inv_r_mb + _pret_au_ch_mb
+        _solde_r_mb = _total_moyens_r_mb - _total_besoins_r_mb
+
+        # Waterfalls par entite
+        _c_mb1, _c_mb2 = st.columns(2)
+        with _c_mb1:
+            st.markdown("#### Chateau d'Argenteau")
+            _build_waterfall_moyens_besoins(
+                st, go, _prets_ch_mb, _fp_ch_mb, _total_moyens_ch_mb,
+                _total_inv_ch_mb, _besoin_treso_ch, _solde_ch_mb, "rpt_chateau"
+            )
+        with _c_mb2:
+            st.markdown("#### Immobiliere Rocher")
+            _wf_pr_r = [{"nom": pr["nom"], "montant": pr["montant"]} for pr in _rocher_prets_mb]
+            _build_waterfall_moyens_besoins(
+                st, go, _wf_pr_r, _rocher_fp_mb, _total_moyens_r_mb,
+                _total_inv_r_mb + _pret_au_ch_mb, 0, _solde_r_mb, "rpt_rocher"
+            )
+
+        # Waterfall consolide (les 2 entites aggregees)
+        st.markdown("#### Vue consolidee")
+        # Agreger les prets par nom
+        _all_prets_conso = {}
+        for pr in _prets_ch_mb:
+            _n = pr["nom"]
+            _all_prets_conso[_n] = _all_prets_conso.get(_n, 0) + pr["montant"]
+        for pr in _rocher_prets_mb:
+            _n = pr["nom"]
+            _all_prets_conso[_n] = _all_prets_conso.get(_n, 0) + pr["montant"]
+        _prets_conso = [{"nom": n, "montant": m} for n, m in _all_prets_conso.items()]
+        _fp_conso = _fp_ch_mb + _rocher_fp_mb
+        _total_moyens_conso = _total_moyens_ch_mb + _total_moyens_r_mb
+        # Besoins consolides : invest Rocher + invest Chateau + besoin treso Chateau (pret intra-groupe s'annule)
+        _total_inv_conso = _total_inv_ch_mb + _total_inv_r_mb
+        _total_besoins_conso = _total_inv_conso + _besoin_treso_ch + _pret_au_ch_mb
+        _solde_conso = _total_moyens_conso - _total_besoins_conso
+        _build_waterfall_moyens_besoins(
+            st, go, _prets_conso, _fp_conso, _total_moyens_conso,
+            _total_inv_conso + _pret_au_ch_mb, _besoin_treso_ch, _solde_conso, "rpt_conso"
+        )
+
+        # ════════════════════════════════════════════════════════════════════
+        # 7. PLAN FINANCIER ROCHER
+        # ════════════════════════════════════════════════════════════════════
+        _cmt("before_s7_rocher")
         st.markdown('<h2 style="border-bottom:3px solid #11998e; padding-bottom:8px; margin-top:30px;">'
-                    '5. Plan financier &mdash; Immobiliere Rocher</h2>', unsafe_allow_html=True)
+                    '6. Plan financier &mdash; Immobiliere Rocher</h2>', unsafe_allow_html=True)
 
         # Commentaire editable — synthese Rocher
         _comment_key_ro = "commentaire_rocher"
@@ -5972,6 +6276,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         for pr in prets_ro:
             if pr["montant"] > 0:
                 dfs_ro[pr["nom"]] = calc_tableau_pret(pr, p["date_ouverture"], p["nb_mois_projection"])
+        pret_rocher_ch = _pret_rocher_ch
         df_pret_ch_ro = calc_tableau_pret(pret_rocher_ch, p["date_ouverture"], p["nb_mois_projection"]) if pret_rocher_ch else pd.DataFrame()
 
         # Calculer interets et capital moyens annuels payes par Rocher
@@ -5984,20 +6289,32 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _moy_int_an_ro = _total_int_ro / _nb_ans_proj
         _moy_cap_an_ro = _total_cap_ro / _nb_ans_proj
 
-        _hyp_data = f"""
+        _int_rec_an = 0
+        if pret_rocher_ch and not df_pret_ch_ro.empty:
+            _int_rec_an = df_pret_ch_ro["interets"].sum() / _nb_ans_proj
+
+        _c_hyp1, _c_hyp2 = st.columns(2)
+        with _c_hyp1:
+            st.markdown("#### Investissements & Dettes")
+            st.markdown(f"""
 | Poste | Valeur |
 |---|---|
 | Investissement total | **{total_inv_ro:,.0f} \u20ac** |
 | Amortissement annuel | **{amort_an_ro:,.0f} \u20ac** |
-| Loyer facture au Chateau | **{loyer_m:,.0f} \u20ac/mois** ({loyer_m*12:,.0f} \u20ac/an) |
-| Pret octroye au Chateau | **{pret_rocher_ch['montant']:,.0f} \u20ac** @ {pret_rocher_ch['taux_annuel']:.1%} | """ if pret_rocher_ch else ""
-        _hyp_data += f"""
-| Total dettes Rocher | **{total_dettes_ro:,.0f} \u20ac** |
+| Total dettes | **{total_dettes_ro:,.0f} \u20ac** |
 | Interets moyens / an | **{_moy_int_an_ro:,.0f} \u20ac** |
 | Capital rembourse moyen / an | **{_moy_cap_an_ro:,.0f} \u20ac** |
-| Fonds propres | **{fp_ro:,.0f} \u20ac** |
-"""
-        st.markdown(_hyp_data)
+""")
+        with _c_hyp2:
+            st.markdown("#### Revenus")
+            _pret_info = f"**{pret_rocher_ch['montant']:,.0f} \u20ac** @ {pret_rocher_ch['taux_annuel']:.1%}" if pret_rocher_ch else "-"
+            st.markdown(f"""
+| Poste | Valeur |
+|---|---|
+| Loyer facture au Chateau | **{loyer_m:,.0f} \u20ac/mois** ({loyer_m*12:,.0f} \u20ac/an) |
+| Pret octroye au Chateau | {_pret_info} |
+| Revenus d'interets moyens / an | **{_int_rec_an:,.0f} \u20ac** |
+""")
 
         rows_ro = []
         for m in range(p["nb_mois_projection"]):
@@ -6058,7 +6375,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 5. PLAN FINANCIER CHATEAU
         # ════════════════════════════════════════════════════════════════════
         st.markdown('<h2 style="border-bottom:3px solid #f5576c; padding-bottom:8px; margin-top:30px;">'
-                    "6. Plan financier &mdash; Chateau d'Argenteau</h2>", unsafe_allow_html=True)
+                    "7. Plan financier &mdash; Chateau d'Argenteau</h2>", unsafe_allow_html=True)
 
         # Donnees pour commentaire et hypotheses
         total_inv_ch = sum(inv["montant"] for inv in p.get("investissements", []))
@@ -6119,31 +6436,17 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                 p[_comment_key_ch] = _new_comment_ch
                 sauvegarder_plan(plan_nom, p)
 
-        # Services proposes
-        st.markdown("### Services proposes")
+        # Marge par service
+        st.markdown("### Marge par service")
         st.markdown(
-            f"Le Chateau d'Argenteau propose **5 sources de revenus** :\n\n"
-            f"- **\U0001F3E8 Hebergement** — {nb_ch} chambres 5 etoiles, ADR pondere de {adr_pondere:,.0f} \u20ac\n"
-            f"- **\U0001F37D\ufe0f Brasserie & Petit-dejeuner** — Restaurant proposant dejeuners et soupers "
-            f"({p.get('nb_couverts_brasserie', 80)} couverts, "
-            f"prix moyen midi {p.get('brasserie_prix_diner', 45):,.0f} \u20ac / soir {p.get('brasserie_prix_souper', 75):,.0f} \u20ac) "
-            f"+ petits-dejeuners pour les clients hotel ({p.get('petit_dej_prix', 37.5):,.0f} \u20ac, "
-            f"taux de prise {p.get('petit_dej_taux', 0.85):.0%})\n"
-            f"- **\U0001F378 Bar** — Bar d'hotel, prix moyen {p.get('bar_prix_moyen', 18):,.0f} \u20ac/pers., "
-            f"taux de frequentation clients hotel {p.get('bar_taux_clients_hotel', 0.40):.0%}\n"
-            f"- **\U0001F9D6 Spa & Bien-etre** — Entrees et soins pour clients hotel et externes "
-            f"(soin hotel {p.get('spa_soin_hotel_prix', 120):,.0f} \u20ac, "
-            f"soin ext. {p.get('spa_soin_ext_prix', 150):,.0f} \u20ac)\n"
-            f"- **\U0001F3DB\ufe0f Salles & Evenements** — Seminaires ({p.get('seminaire_nb_an', 50)}/an a "
-            f"{p.get('seminaire_prix_location', 800):,.0f} \u20ac) et mariages ({p.get('mariage_nb_an', 12)}/an a "
-            f"{p.get('mariage_prix_location', 2500):,.0f} \u20ac)"
+            f"Le Chateau d'Argenteau propose **6 sources de revenus** :\n\n"
+            f"- Hebergement (5 etoiles)\n"
+            f"- Brasserie (petits-dejeuners, midi et soir)\n"
+            f"- Bar\n"
+            f"- Spa & Bien-etre\n"
+            f"- Location de salles (mariages, seminaires, ...)\n"
+            f"- Location restaurant gastronomique"
         )
-
-        # Hypotheses structurees
-        st.markdown("### Hypotheses principales")
-
-        # ── I. Marge par service ──
-        st.markdown("#### I. Marge par service")
 
         # Donnees CV
         _cv_nuitee = p.get("cv_hebergement_par_nuitee", {})
@@ -6185,138 +6488,50 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                                   f'<td style="padding:6px 8px; border-bottom:1px solid #eee;">{c2}</td>'
                                   f'<td style="padding:6px 8px; border-bottom:1px solid #eee;">{c3}</td></tr>')
 
-        # Segments en lignes
-        _seg_rows = ""
-        for seg_name, seg_data in segments.items():
-            _seg_rows += _r(f'Segment {seg_name}', f'Part : <b>{seg_data["part"]*100:.0f}%</b> / Prix : <b>{seg_data["prix"]:,.0f} \u20ac</b>', '')
+        # Donnees OTA et franchise
+        _ota_pct = p.get("cv_commission_ota_pct", 0.17)
+        _poids_ota = sum(segments[s]["part"] * p.get("segments_part_ota", {}).get(s, 0) for s in segments)
+        _franchise_pct = p.get("cv_franchise_pct", 0.04)
+        _franchise_modes = p.get("cv_franchise_modes", ["pct"])
+        _franchise_nuitee = p.get("cv_franchise_par_nuitee", 0)
+        _franchise_forfait = p.get("cv_franchise_forfait_mois", 0)
+        _franchise_desc = []
+        if "pct" in _franchise_modes:
+            _franchise_desc.append(f"{_franchise_pct:.0%} CA")
+        if "nuitee" in _franchise_modes and _franchise_nuitee > 0:
+            _franchise_desc.append(f"{_franchise_nuitee:,.1f} \u20ac/nuitee")
+        if "forfait" in _franchise_modes and _franchise_forfait > 0:
+            _franchise_desc.append(f"{_franchise_forfait:,.0f} \u20ac/mois")
 
         # 1. Hebergement
         st.markdown(f'**1. Hebergement**', unsafe_allow_html=True)
         st.markdown(_tbl
             + _r(f'{nb_ch} chambres', f'CV / nuitee : <b>{_cv_nuitee_total:,.0f} \u20ac</b>', f'Personnel : <b>{_etp_h:.1f} ETP</b>')
             + _r(f'ADR : <b>{adr_pondere:,.0f} \u20ac</b>', f'Commission CB : <b>{_cv_cb_nuitee:,.1f} \u20ac</b> ({_cv_cb_pct:.0%} CB)', f'Masse salariale : <b>{_masse_h:,.0f} \u20ac/an</b>')
-            + _seg_rows
-            + _r(f'Occ. An1/2/3/Crois. : <b>{taux_occ[0]:.0%}</b> / <b>{taux_occ[1]:.0%}</b> / <b>{taux_occ[2]:.0%}</b> / <b>{taux_occ[3]:.0%}</b>', '', '')
+            + _r(f'Occ. An1/2/3/Crois. : <b>{taux_occ[0]:.0%} / {taux_occ[1]:.0%} / {taux_occ[2]:.0%} / {taux_occ[3]:.0%}</b>',
+                 f'Commission OTA : <b>{_ota_pct:.0%}</b> (poids : {_poids_ota:.0%})', '')
+            + _r(f'Saisonnalite mensuelle appliquee', f'Franchise : <b>{" + ".join(_franchise_desc) if _franchise_desc else "Aucune"}</b>', '')
             + '</tbody></table>', unsafe_allow_html=True)
 
-        # 2. Brasserie
-        st.markdown(f'**2. Brasserie & Petit-dejeuner**', unsafe_allow_html=True)
-        st.markdown(_tbl
-            + _r(f'{p.get("nb_couverts_brasserie", 80)} couverts', f'Food cost midi/soir : <b>{_cv_brass_pct:.0%}</b>', f'Personnel : <b>{_etp_b:.1f} ETP</b>')
-            + _r(f'Prix midi : <b>{p.get("brasserie_prix_diner", 45):,.0f} \u20ac</b>', f'Food cost PDJ : <b>{_cv_pdj_pct:.0%}</b>', f'Masse salariale : <b>{_masse_b:,.0f} \u20ac/an</b>')
-            + _r(f'Prix soir : <b>{p.get("brasserie_prix_souper", 75):,.0f} \u20ac</b>', '', '')
-            + _r(f'PDJ : <b>{p.get("petit_dej_prix", 37.5):,.0f} \u20ac</b> (taux prise {p.get("petit_dej_taux", 0.85):.0%})', '', '')
-            + '</tbody></table>', unsafe_allow_html=True)
+        # Graphique saisonnalite
+        _saison = p.get("saisonnalite", [1]*12)
+        _mois_labels = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"]
+        _colors_saison = ["#e74c3c" if s < 0.9 else "#f39c12" if s < 1.05 else "#27ae60" for s in _saison]
+        fig_saison = go.Figure()
+        fig_saison.add_trace(go.Bar(x=_mois_labels, y=_saison, marker_color=_colors_saison,
+            text=[f"<b>{s:.2f}</b>" for s in _saison], textposition="outside",
+            textfont=dict(size=11), hovertemplate="%{x} : %{y:.3f}<extra></extra>"))
+        fig_saison.add_hline(y=1.0, line_dash="dash", line_color="#888", opacity=0.5)
+        fig_saison.update_layout(title="Coefficients de saisonnalite mensuelle", height=320,
+            xaxis=dict(type="category"), yaxis=dict(range=[0, max(_saison)*1.15], title="Coefficient"),
+            margin=dict(l=40, r=20, t=40, b=30))
+        _show_fig(fig_saison, key="ch_saisonnalite")
 
-        # 3. Bar
-        st.markdown(f'**3. Bar**', unsafe_allow_html=True)
-        st.markdown(_tbl
-            + _r(f'Prix moyen : <b>{p.get("bar_prix_moyen", 18):,.0f} \u20ac</b>', f'Beverage cost : <b>{_cv_bar_pct:.0%}</b>', '')
-            + _r(f'Taux clients hotel : <b>{p.get("bar_taux_clients_hotel", 0.40):.0%}</b>', f'Consommables : <b>{_cv_bar_conso:.2f} \u20ac/conso</b>', '')
-            + '</tbody></table>', unsafe_allow_html=True)
-
-        # 4. Spa
-        st.markdown(f'**4. Spa & Bien-etre**', unsafe_allow_html=True)
-        st.markdown(_tbl
-            + _r(f'Entree hotel : <b>{p.get("spa_entree_hotel_prix", 0):,.0f} \u20ac</b> (taux {p.get("spa_entree_hotel_taux", 0.20):.0%})', f'Cout soin : <b>{_cv_spa_soin:,.0f} \u20ac</b>', f'Personnel : <b>{_etp_s:.1f} ETP</b>')
-            + _r(f'Soin hotel : <b>{p.get("spa_soin_hotel_prix", 120):,.0f} \u20ac</b> (taux {p.get("spa_soin_hotel_taux", 0.10):.0%})', f'Produits : <b>{_cv_spa_prod:,.0f} \u20ac/soin</b>', f'Masse salariale : <b>{_masse_s:,.0f} \u20ac/an</b>')
-            + _r(f'Entree ext. : <b>{p.get("spa_entree_ext_prix", 55):,.0f} \u20ac</b> ({p.get("spa_entree_ext_nb_mois", 25)}/mois)', '', '')
-            + _r(f'Soin ext. : <b>{p.get("spa_soin_ext_prix", 150):,.0f} \u20ac</b> ({p.get("spa_soin_ext_nb_mois", 15)}/mois)', '', '')
-            + '</tbody></table>', unsafe_allow_html=True)
-
-        # 5. Salles & Evenements
-        st.markdown(f'**5. Salles & Evenements**', unsafe_allow_html=True)
-        st.markdown(_tbl
-            + _r(f'Seminaires : <b>{p.get("seminaire_nb_an", 50)}/an</b> a {p.get("seminaire_prix_location", 800):,.0f} \u20ac',
-                f'Energie : <b>{p.get("cv_seminaire_energie", 75):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_seminaire_nettoyage", 500):,.0f} \u20ac</b> | Pause : <b>{p.get("cv_seminaire_pause_participant", 8):,.0f} \u20ac/pers</b>',
-                '')
-            + _r(f'Mariages : <b>{p.get("mariage_nb_an", 12)}/an</b> a {p.get("mariage_prix_location", 2500):,.0f} \u20ac',
-                f'Energie : <b>{p.get("cv_mariage_energie", 150):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_mariage_nettoyage", 1000):,.0f} \u20ac</b>',
-                '')
-            + _r(f'Salles chateau : <b>{p.get("salles_chateau_nb_an", 30)}/an</b> a {p.get("salles_chateau_prix", 1500):,.0f} \u20ac',
-                f'Energie : <b>{p.get("cv_salles_chateau_energie", 100):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_salles_chateau_nettoyage", 500):,.0f} \u20ac</b>',
-                '')
-            + '</tbody></table>', unsafe_allow_html=True)
-
-        # ── II. Frais fixes indirects ──
-        _pers_indirect = p.get("personnel_indirect", [])
-        _etp_ind = sum(pe["etp"] for pe in _pers_indirect)
-        _masse_ind = sum(pe["cout_brut"]*(1+cp_ch)*pe["etp"] for pe in _pers_indirect)
-
-        st.markdown("#### II. Frais fixes indirects")
-        _hc1, _hc2 = st.columns(2)
-        with _hc1:
-            st.markdown(f"""
-| | |
-|---|---|
-| Personnel indirect | **{_etp_ind:.1f} ETP** |
-| Masse salariale indirecte | **{_masse_ind:,.0f} \u20ac/an** |
-| Charges patronales | **{cp_ch:.0%}** |
-| Inflation annuelle | **{p.get('inflation_an', 0.025):.1%}** |
-| Loyer (vers Rocher) | **{loyer_m_ch:,.0f} \u20ac/mois** ({loyer_m_ch*12:,.0f} \u20ac/an) |
-""")
-        with _hc2:
-            if _cf_indirects:
-                _cf_ind_rows = ""
-                for _cf_k, _cf_v in _cf_indirects.items():
-                    _cf_ind_rows += f"| {_cf_k} | **{_cf_v:,.0f} \u20ac/an** |\n"
-                st.markdown(f"""
-| Poste | Montant |
-|---|---|
-{_cf_ind_rows}| **Total CF indirects** | **{_total_cf_indir:,.0f} \u20ac/an** |
-""")
-
-        # ── III. Investissement & Financement ──
-        st.markdown("#### III. Investissement & Financement")
-        _hc1, _hc2 = st.columns(2)
-        with _hc1:
-            st.markdown(f"""
-| | |
-|---|---|
-| Investissement total | **{total_inv_ch:,.0f} \u20ac** |
-| Fonds propres | **{fp_ch:,.0f} \u20ac** |
-| Dettes externes | **{total_dettes_ch_ext:,.0f} \u20ac** |
-| Pret Rocher (intra-groupe) | **{total_dettes_ch - total_dettes_ch_ext:,.0f} \u20ac** |
-""")
-        with _hc2:
-            _prets_rows = ""
-            for pr in prets_ch:
-                _rw = " \U0001F7E2 RW" if pr.get("subside_rw") else ""
-                _type = pr.get("type", "annuite")
-                _type_lbl = "Mensualites constantes" if _type == "annuite" else "Amort. constant"
-                _diff = pr.get("differe_mois", 0)
-                _diff_lbl = f" | Differe {_diff} mois" if _diff > 0 else ""
-                _prets_rows += (f"| {pr['nom']} | **{pr['montant']:,.0f} \u20ac** @ {pr['taux_annuel']:.1%} "
-                                f"/ {pr['duree_ans']} ans | {_type_lbl}{_diff_lbl}{_rw} |\n")
-            st.markdown(f"""
-| Pret | Montant & taux | Modalites |
-|---|---|---|
-{_prets_rows}""")
-
-        # 5a. Resultats
-        _cmt("before_ch_resultats")
-        st.markdown("### Resultats")
-        fig = go.Figure()
-        for col, lbl, clr in [("ca_hebergement","Hebergement","#667eea"),("ca_brasserie","Brasserie","#f5576c"),
-            ("ca_bar","Bar","#ffcc00"),("ca_spa","Spa","#11998e"),("ca_salles","Salles","#a0522d")]:
-            fig.add_trace(go.Bar(x=_x, y=K(_ann[col]), name=lbl, marker_color=clr))
-        _ca_tots = K(_ann["ca_total"])
-        fig.add_trace(go.Scatter(x=_x, y=_ca_tots, mode="markers+text",
-            text=[f"<b>{v:,.0f}</b>" for v in _ca_tots], textposition="top center",
-            textfont=dict(size=11, color="#1a1a6e"), marker=dict(size=1, color="rgba(0,0,0,0)"),
-            showlegend=False, hoverinfo="skip", cliponaxis=False))
-        fig.update_layout(title="Ventes par service (K\u20ac)", height=420, barmode="stack",
-            xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
-            range=[0, max(_ca_tots)*1.18] if len(_ca_tots)>0 else None), legend=_leg)
-        _show_fig(fig, key="ch_ventes")
-
-        # Indicateurs hoteliers (apres ventes)
-        _cmt("before_ch_indicateurs")
-        st.caption("**ADR** (Average Daily Rate) = prix moyen par chambre vendue | "
-                   "**RevPAR** (Revenue Per Available Room) = revenu par chambre disponible = ADR x Taux d'occupation")
-        _ann["revpar"] = _ann["ca_hebergement"] / (nb_ch * 365)
-        _ann["adr"] = _ann["ca_hebergement"] / _ann["nuitees"].replace(0, float("nan"))
-        _ann["occ_pct"] = _ann["taux_occupation"] * 100
+        # Graphiques nuitees et taux occupation / ADR / RevPAR
+        if "_ann_ch" not in dir():
+            _ann["revpar"] = _ann["ca_hebergement"] / (nb_ch * 365)
+            _ann["adr"] = _ann["ca_hebergement"] / _ann["nuitees"].replace(0, float("nan"))
+            _ann["occ_pct"] = _ann["taux_occupation"] * 100
 
         fig = go.Figure()
         fig.add_trace(go.Bar(x=_x, y=_ann["nuitees"], name="Nuitees", marker_color="#4facfe",
@@ -6324,8 +6539,10 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             textfont=dict(size=10, color="#1a5e96")))
         fig.update_layout(title="Nuitees par an", height=350, xaxis=dict(type="category"),
             yaxis=dict(tickformat=",.0f", range=[0, max(_ann["nuitees"])*1.15]))
-        _show_fig(fig, key="ch_nuitees")
+        _show_fig(fig, key="ch_nuitees_hyp")
 
+        st.caption("**ADR** (Average Daily Rate) = prix moyen par chambre vendue | "
+                   "**RevPAR** (Revenue Per Available Room) = revenu par chambre disponible = ADR x Taux d'occupation")
         fig = go.Figure()
         fig.add_trace(go.Bar(x=_x, y=_ann["adr"], name="ADR (\u20ac)", marker_color="#667eea",
             text=[f"<b>{v:,.0f}</b>" for v in _ann["adr"]], textposition="outside",
@@ -6339,8 +6556,92 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             textfont=dict(size=12, color="#0b6e66")))
         fig.update_layout(title="Taux occupation, ADR (Average Daily Rate), RevPAR", height=500, barmode="group",
             xaxis=dict(type="category"), yaxis=dict(range=[0, max(_ann["adr"])*1.25]), legend=_leg)
-        _show_fig(fig, key="ch_occ_adr")
+        _show_fig(fig, key="ch_occ_adr_hyp")
 
+        # 2. Brasserie
+        _taux_occ_brass = p.get("taux_occ_brasserie", p.get("taux_occ", [0.42]))
+        _occ_brass_str = " / ".join(f"{t:.0%}" for t in _taux_occ_brass)
+        st.markdown(f'**2. Brasserie & Petit-dejeuner**', unsafe_allow_html=True)
+        st.markdown(_tbl
+            + _r(f'{p.get("nb_couverts_brasserie", 80)} couverts', f'Food cost midi/soir : <b>{_cv_brass_pct:.0%}</b>', f'Personnel : <b>{_etp_b:.1f} ETP</b>')
+            + _r(f'Prix midi : <b>{p.get("brasserie_prix_diner", 45):,.0f} \u20ac</b>', f'Food cost PDJ : <b>{_cv_pdj_pct:.0%}</b>', f'Masse salariale : <b>{_masse_b:,.0f} \u20ac/an</b>')
+            + _r(f'Prix soir : <b>{p.get("brasserie_prix_souper", 75):,.0f} \u20ac</b>', '', '')
+            + _r(f'PDJ : <b>{p.get("petit_dej_prix", 37.5):,.0f} \u20ac</b> (taux prise {p.get("petit_dej_taux", 0.85):.0%})', '', '')
+            + _r(f'Occ. brasserie : <b>{_occ_brass_str}</b>', '', '')
+            + _r(f'Saisonnalite mensuelle appliquee', '', '')
+            + '</tbody></table>', unsafe_allow_html=True)
+
+        # 3. Bar
+        _pers_bar = p.get("personnel_bar", [])
+        _etp_bar = sum(pe["etp"] for pe in _pers_bar)
+        _masse_bar = sum(pe["cout_brut"]*(1+cp_ch)*pe["etp"] for pe in _pers_bar)
+        _cf_bar_elec = p.get("cf_directs_bar", {}).get("Electricite", 0) if isinstance(p.get("cf_directs_bar"), dict) else 0
+        st.markdown(f'**3. Bar**', unsafe_allow_html=True)
+        st.markdown(_tbl
+            + _r(f'Prix moyen : <b>{p.get("bar_prix_moyen", 18):,.0f} \u20ac</b>', f'Beverage cost : <b>{_cv_bar_pct:.0%}</b>', f'Personnel : <b>{_etp_bar:.1f} ETP</b>')
+            + _r(f'Taux clients hotel : <b>{p.get("bar_taux_clients_hotel", 0.40):.0%}</b>', f'Consommables : <b>{_cv_bar_conso:.2f} \u20ac/conso</b>', f'Masse salariale : <b>{_masse_bar:,.0f} \u20ac/an</b>')
+            + _r('', '', f'Electricite : <b>{_cf_bar_elec:,.0f} \u20ac/an</b>' if _cf_bar_elec > 0 else '')
+            + '</tbody></table>', unsafe_allow_html=True)
+
+        # 4. Spa
+        _cf_spa = p.get("cf_directs_spa", {})
+        _cf_spa_details = " | ".join(f"{k} : <b>{v:,.0f} \u20ac</b>" for k, v in _cf_spa.items() if v > 0)
+        st.markdown(f'**4. Spa & Bien-etre**', unsafe_allow_html=True)
+        st.markdown(_tbl
+            + _r(f'Entree hotel : <b>{p.get("spa_entree_hotel_prix", 0):,.0f} \u20ac</b> (taux {p.get("spa_entree_hotel_taux", 0.20):.0%})', f'Cout soin : <b>{_cv_spa_soin:,.0f} \u20ac</b>', f'Personnel : <b>{_etp_s:.1f} ETP</b>')
+            + _r(f'Soin hotel : <b>{p.get("spa_soin_hotel_prix", 120):,.0f} \u20ac</b> (taux {p.get("spa_soin_hotel_taux", 0.10):.0%})', f'Produits : <b>{_cv_spa_prod:,.0f} \u20ac/soin</b>', f'Masse salariale : <b>{_masse_s:,.0f} \u20ac/an</b>')
+            + _r(f'Entree ext. : <b>{p.get("spa_entree_ext_prix", 55):,.0f} \u20ac</b> ({p.get("spa_entree_ext_nb_mois", 25)}/mois)', '', _cf_spa_details if _cf_spa_details else '')
+            + _r(f'Soin ext. : <b>{p.get("spa_soin_ext_prix", 150):,.0f} \u20ac</b> ({p.get("spa_soin_ext_nb_mois", 15)}/mois)', '', '')
+            + '</tbody></table>', unsafe_allow_html=True)
+
+        # 5. Salles & Evenements
+        _cf_events = p.get("cf_directs_evenements", {})
+        _cf_events_details = " | ".join(f"{k} : <b>{v:,.0f} \u20ac</b>" for k, v in _cf_events.items() if v > 0)
+        _catering_prix = p.get("mariage_catering_prix_convive", 0)
+        _catering_pct = p.get("mariage_commission_catering_pct", 0)
+        _nb_convives = p.get("mariage_nb_convives_moy", 120)
+        _catering_info = f"Commission catering : <b>{_catering_pct:.0%}</b> sur {_nb_convives} convives x {_catering_prix:,.0f} \u20ac" if _catering_pct > 0 else ""
+        st.markdown(f'**5. Salles & Evenements**', unsafe_allow_html=True)
+        st.markdown(_tbl
+            + _r(f'Seminaires : <b>{p.get("seminaire_nb_an", 50)}/an</b> a {p.get("seminaire_prix_location", 800):,.0f} \u20ac',
+                f'Energie : <b>{p.get("cv_seminaire_energie", 75):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_seminaire_nettoyage", 500):,.0f} \u20ac</b> | Pause : <b>{p.get("cv_seminaire_pause_participant", 8):,.0f} \u20ac/pers</b>',
+                _cf_events_details if _cf_events_details else '')
+            + _r(f'Mariages : <b>{p.get("mariage_nb_an", 12)}/an</b> a {p.get("mariage_prix_location", 2500):,.0f} \u20ac',
+                f'Energie : <b>{p.get("cv_mariage_energie", 150):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_mariage_nettoyage", 1000):,.0f} \u20ac</b>',
+                '')
+            + (_r(_catering_info, '', '') if _catering_info else '')
+            + _r(f'Salles chateau : <b>{p.get("salles_chateau_nb_an", 30)}/an</b> a {p.get("salles_chateau_prix", 1500):,.0f} \u20ac',
+                f'Energie : <b>{p.get("cv_salles_chateau_energie", 100):,.0f} \u20ac</b> | Nettoyage : <b>{p.get("cv_salles_chateau_nettoyage", 500):,.0f} \u20ac</b>',
+                '')
+            + '</tbody></table>', unsafe_allow_html=True)
+
+        # 6. Location restaurant gastronomique
+        _loyer_resto = p.get("loyer_restaurant_mensuel", 0)
+        st.markdown(f'**6. Location restaurant gastronomique**', unsafe_allow_html=True)
+        st.markdown(_tbl
+            + _r(f'Loyer mensuel : <b>{_loyer_resto:,.0f} \u20ac/mois</b> ({_loyer_resto*12:,.0f} \u20ac/an)', '', '')
+            + '</tbody></table>', unsafe_allow_html=True)
+
+        # ── Graphiques par service (avant frais fixes indirects) ──
+        st.markdown("---")
+
+        # Ventes par service (avec loyer restaurant)
+        fig = go.Figure()
+        for col, lbl, clr in [("ca_hebergement","Hebergement","#667eea"),("ca_brasserie","Brasserie","#f5576c"),
+            ("ca_bar","Bar","#ffcc00"),("ca_spa","Spa","#11998e"),("ca_salles","Salles","#a0522d"),
+            ("ca_loyer_restaurant","Location resto.","#ff8c00")]:
+            fig.add_trace(go.Bar(x=_x, y=K(_ann[col]), name=lbl, marker_color=clr))
+        _ca_tots = K(_ann["ca_total"])
+        fig.add_trace(go.Scatter(x=_x, y=_ca_tots, mode="markers+text",
+            text=[f"<b>{v:,.0f}</b>" for v in _ca_tots], textposition="top center",
+            textfont=dict(size=11, color="#1a1a6e"), marker=dict(size=1, color="rgba(0,0,0,0)"),
+            showlegend=False, hoverinfo="skip", cliponaxis=False))
+        fig.update_layout(title="Ventes par service (K\u20ac)", height=420, barmode="stack",
+            xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
+            range=[0, max(_ca_tots)*1.18] if len(_ca_tots)>0 else None), legend=_leg)
+        _show_fig(fig, key="ch_ventes_hyp")
+
+        # Charges variables par service
         fig = go.Figure()
         for col, lbl, clr in [("cv_hebergement","Hebergement","#667eea"),("cv_brasserie","Brasserie","#f5576c"),
             ("cv_bar","Bar","#ffcc00"),("cv_spa","Spa","#11998e")]:
@@ -6353,22 +6654,22 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         fig.update_layout(title="Charges variables par service (K\u20ac)", height=420, barmode="stack",
             xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
             range=[0, max(_cv_tots)*1.18] if len(_cv_tots)>0 else None), legend=_leg)
-        _show_fig(fig, key="ch_cv")
+        _show_fig(fig, key="ch_cv_hyp")
 
-        # Ventiler CF directs par service (masses salariales + CF directs par dept)
+        # Frais fixes directs par service
         _cfd_h = _masse_h + sum(p.get("cf_directs_hebergement", {}).values())
         _cfd_b = _masse_b + sum(p.get("cf_directs_brasserie", {}).values())
+        _cfd_bar = _masse_bar + sum(v for v in (p.get("cf_directs_bar", {}) if isinstance(p.get("cf_directs_bar"), dict) else {}).values())
         _cfd_s = _masse_s + sum(p.get("cf_directs_spa", {}).values())
         _cfd_e = _masse_e + sum(p.get("cf_directs_evenements", {}).values())
-        _cfd_total_base = _cfd_h + _cfd_b + _cfd_s + _cfd_e
-        # Repartir proportionnellement sur les annees
+        _cfd_total_base_h = _cfd_h + _cfd_b + _cfd_bar + _cfd_s + _cfd_e
         _cf_dir_k = K(_ann["cf_directs_total"])
         fig = go.Figure()
         for _dept_lbl, _dept_val, _dept_clr in [
             ("Hebergement", _cfd_h, "#667eea"), ("Brasserie", _cfd_b, "#f5576c"),
-            ("Spa", _cfd_s, "#11998e"), ("Evenements", _cfd_e, "#a0522d")]:
-            _pct = _dept_val / _cfd_total_base if _cfd_total_base > 0 else 0
-            fig.add_trace(go.Bar(x=_x, y=[v * _pct for v in _cf_dir_k], name=_dept_lbl, marker_color=_dept_clr))
+            ("Bar", _cfd_bar, "#ffcc00"), ("Spa", _cfd_s, "#11998e"), ("Evenements", _cfd_e, "#a0522d")]:
+            _pct_d = _dept_val / _cfd_total_base_h if _cfd_total_base_h > 0 else 0
+            fig.add_trace(go.Bar(x=_x, y=[v * _pct_d for v in _cf_dir_k], name=_dept_lbl, marker_color=_dept_clr))
         fig.add_trace(go.Scatter(x=_x, y=_cf_dir_k, mode="markers+text",
             text=[f"<b>{v:,.0f}</b>" for v in _cf_dir_k], textposition="top center",
             textfont=dict(size=11, color="#1a1a6e"), marker=dict(size=1, color="rgba(0,0,0,0)"),
@@ -6376,67 +6677,112 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         fig.update_layout(title="Frais fixes directs par service (K\u20ac)", height=400, barmode="stack",
             xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
             range=[0, max(_cf_dir_k)*1.18] if len(_cf_dir_k)>0 else None), legend=_leg)
-        _show_fig(fig, key="ch_cf_directs")
+        _show_fig(fig, key="ch_cf_dir_hyp")
 
-        # Marge ventilee par service
+        # Marge par service + Subside
         fig = go.Figure()
         _ann["marge_heberg"] = _ann["ca_hebergement"] - _ann["cv_hebergement"]
         _ann["marge_brass"] = _ann["ca_brasserie"] - _ann["cv_brasserie"]
         _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"]
         _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"]
         _ann["marge_salles"] = _ann["ca_salles"]
-        _marge_services = [("marge_heberg","Hebergement","#667eea"),("marge_brass","Brasserie","#f5576c"),
+        _ann["marge_resto"] = _ann.get("ca_loyer_restaurant", 0)
+        _marge_services_hyp = [("marge_heberg","Hebergement","#667eea"),("marge_brass","Brasserie","#f5576c"),
             ("marge_bar","Bar","#ffcc00"),("marge_spa","Spa","#11998e"),("marge_salles","Salles","#a0522d"),
-            ("subside_rw","Subside RW","#f093fb")]
-        for col, lbl, clr in _marge_services:
+            ("marge_resto","Location resto.","#ff8c00"),("subside_rw","Subside RW","#f093fb")]
+        for col, lbl, clr in _marge_services_hyp:
             fig.add_trace(go.Bar(x=_x, y=K(_ann[col]), name=lbl, marker_color=clr))
-        _marge_tot = K(_ann["marge_heberg"] + _ann["marge_brass"] + _ann["marge_bar"] + _ann["marge_spa"] + _ann["marge_salles"] + _ann["subside_rw"])
-        _max_marge = max(_marge_tot) if len(_marge_tot) > 0 else 1
-        _offset_y = _max_marge * 0.04
-        # Labels totaux au-dessus des barres avec offset
-        fig.add_trace(go.Scatter(x=_x, y=[v + _offset_y for v in _marge_tot], mode="text",
-            text=[f"<b>{v:,.0f}</b>" for v in _marge_tot], textposition="top center",
-            textfont=dict(size=12, color="#1a1a6e"),
-            showlegend=False, hoverinfo="skip", cliponaxis=False))
+        _marge_tot_hyp = K(_ann["marge_heberg"] + _ann["marge_brass"] + _ann["marge_bar"] + _ann["marge_spa"] + _ann["marge_salles"] + _ann["marge_resto"] + _ann["subside_rw"])
+        _max_mh = max(_marge_tot_hyp) if len(_marge_tot_hyp) > 0 else 1
+        fig.add_trace(go.Scatter(x=_x, y=[v + _max_mh * 0.04 for v in _marge_tot_hyp], mode="text",
+            text=[f"<b>{v:,.0f}</b>" for v in _marge_tot_hyp], textposition="top center",
+            textfont=dict(size=12, color="#1a1a6e"), showlegend=False, hoverinfo="skip", cliponaxis=False))
         fig.update_layout(title="Marge par service + Subside (K\u20ac)", height=500, barmode="stack",
-            xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
-            range=[0, _max_marge * 1.5]), legend=_leg)
-        _show_fig(fig, key="ch_marge")
+            xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f", range=[0, _max_mh * 1.5]), legend=_leg)
+        _show_fig(fig, key="ch_marge_hyp")
 
-        # Camembert repartition des marges (cumul toutes annees)
-        _marge_cumul = {
+        # Camembert repartition marges (cumul)
+        _marge_cumul_hyp = {
             "Hebergement": _ann["marge_heberg"].sum(),
             "Brasserie": _ann["marge_brass"].sum(),
             "Bar": _ann["marge_bar"].sum(),
             "Spa": _ann["marge_spa"].sum(),
             "Salles": _ann["marge_salles"].sum(),
+            "Location resto.": _ann["marge_resto"].sum(),
         }
-        _marge_cumul = {k: max(0, v) for k, v in _marge_cumul.items()}  # Exclure les negatifs
-        _mc_total = sum(_marge_cumul.values())
-        if _mc_total > 0:
-            _mc_colors = ["#667eea", "#f5576c", "#ffcc00", "#11998e", "#a0522d"]
-            _mc_labels = [k for k, v in _marge_cumul.items() if v > 0]
-            _mc_values = [v for v in _marge_cumul.values() if v > 0]
-            fig_mc = go.Figure(data=[go.Pie(
-                labels=_mc_labels, values=_mc_values,
-                marker=dict(colors=_mc_colors[:len(_mc_labels)]),
-                textinfo="label+percent",
-                texttemplate="%{label}<br><b>%{percent}</b>",
-                textfont=dict(size=13),
-                hovertemplate="%{label}<br>%{value:,.0f} K\u20ac<br>%{percent}<extra></extra>",
+        _marge_cumul_hyp = {k: v for k, v in _marge_cumul_hyp.items() if v > 0}
+        if _marge_cumul_hyp:
+            _mc_colors = {"Hebergement":"#667eea","Brasserie":"#f5576c","Bar":"#ffcc00",
+                          "Spa":"#11998e","Salles":"#a0522d","Location resto.":"#ff8c00"}
+            fig = go.Figure(data=[go.Pie(
+                labels=list(_marge_cumul_hyp.keys()), values=list(_marge_cumul_hyp.values()),
+                marker=dict(colors=[_mc_colors.get(k, "#888") for k in _marge_cumul_hyp]),
+                textinfo="label+percent+value",
+                texttemplate="<b>%{label}</b><br><b>%{value:,.0f} K\u20ac</b><br>(%{percent})",
+                textfont=dict(size=13), hole=0.3, pull=[0.02]*len(_marge_cumul_hyp),
             )])
-            fig_mc.update_layout(title="Repartition des marges par service (cumul)", height=400,
-                showlegend=True, legend=dict(font_size=11, orientation="h", y=-0.1, x=0.5, xanchor="center"),
-                margin=dict(l=20, r=20, t=40, b=40))
-            _show_fig(fig_mc, key="ch_marge_pie")
+            fig.update_layout(title="Repartition des marges par service (cumul)", height=450,
+                              showlegend=False, margin=dict(l=20, r=20, t=40, b=20))
+            _show_fig(fig, key="ch_pie_marge_hyp")
 
+        # ── Frais fixes indirects ──
+        _pers_indirect = p.get("personnel_indirect", [])
+        _etp_ind = sum(pe["etp"] for pe in _pers_indirect)
+        _masse_ind = sum(pe["cout_brut"]*(1+cp_ch)*pe["etp"] for pe in _pers_indirect)
+        _cfi_dict = p.get("charges_fixes_indirectes", p.get("charges_fixes_indirectes_par_annee", {}))
+
+        st.markdown("### Frais fixes indirects")
+
+        # Tableau personnel indirect
+        _hc1, _hc2 = st.columns(2)
+        with _hc1:
+            st.markdown("**Personnel indirect**")
+            _pi_rows = ""
+            for pe in _pers_indirect:
+                _cout_total = pe["cout_brut"] * (1 + cp_ch) * pe["etp"]
+                _pi_rows += f"| {pe['poste']} | {pe['etp']:.1f} | **{_cout_total:,.0f} \u20ac** |\n"
+            st.markdown(f"""
+| Poste | ETP | Cout total/an |
+|---|---|---|
+{_pi_rows}| **Total** | **{_etp_ind:.1f}** | **{_masse_ind:,.0f} \u20ac** |
+""")
+
+        with _hc2:
+            st.markdown("**Autres charges indirectes**")
+            _cf_ind_rows = ""
+            _total_autres_val = 0
+            for _cf_k, _cf_v in _cfi_dict.items():
+                _val = _cf_v[0] if isinstance(_cf_v, list) else _cf_v
+                if _val > 0:
+                    _cf_ind_rows += f"| {_cf_k} | **{_val:,.0f} \u20ac/an** |\n"
+                    _total_autres_val += _val
+            _cf_ind_rows += f"| Loyer (vers Rocher) | **{loyer_m_ch*12:,.0f} \u20ac/an** ({loyer_m_ch:,.0f} \u20ac/mois) |\n"
+            _total_autres_val += loyer_m_ch * 12
+            st.markdown(f"""
+| Poste | Montant |
+|---|---|
+{_cf_ind_rows}| **Total** | **{_total_autres_val:,.0f} \u20ac/an** |
+""")
+        st.caption(f"Inflation annuelle prevue : **{p.get('inflation_an', 0.025):.1%}**")
+
+        # Graphique CF indirects — distinguer salaires vs autres
         _cfi_k = K(_ann["cf_indirects_total"])
+        _cf_pers_ind_k = K(_ann.get("cf_personnel_indirect", _ann["cf_indirects_total"] * 0))
+        # Estimer la part salaires vs autres si la colonne n'existe pas
+        _total_cfi_base = _masse_ind + _total_autres_val
+        _pct_sal = _masse_ind / _total_cfi_base if _total_cfi_base > 0 else 0.5
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=_x, y=_cfi_k, name="CF Indirects", marker_color="#764ba2",
-            text=[f"<b>{v:,.0f}</b>" for v in _cfi_k], textposition="outside",
-            textfont=dict(size=11, color="#4a2470")))
-        fig.update_layout(title="Frais fixes indirects (K\u20ac)", height=420, xaxis=dict(type="category"),
-            yaxis=dict(tickformat=",.0f", range=[0, max(_cfi_k)*1.25] if len(_cfi_k)>0 else None))
+        fig.add_trace(go.Bar(x=_x, y=[v * _pct_sal for v in _cfi_k], name="Personnel indirect",
+            marker_color="#764ba2"))
+        fig.add_trace(go.Bar(x=_x, y=[v * (1 - _pct_sal) for v in _cfi_k], name="Autres charges + Loyer",
+            marker_color="#c39bd3"))
+        fig.add_trace(go.Scatter(x=_x, y=_cfi_k, mode="markers+text",
+            text=[f"<b>{v:,.0f}</b>" for v in _cfi_k], textposition="top center",
+            textfont=dict(size=13, color="#4a2470"), marker=dict(size=1, color="rgba(0,0,0,0)"),
+            showlegend=False, hoverinfo="skip", cliponaxis=False))
+        fig.update_layout(title="Frais fixes indirects (K\u20ac)", height=420, barmode="stack",
+            xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
+            range=[0, max(_cfi_k)*1.25] if len(_cfi_k)>0 else None), legend=_leg)
         _show_fig(fig, key="ch_cf_indirects")
 
         # Emploi (apres CF indirects)
@@ -6474,10 +6820,17 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _dept_colors = ["#667eea", "#f5576c", "#11998e", "#a0522d", "#764ba2"]
         fig = go.Figure(data=[go.Pie(labels=_dept_labels, values=_dept_vals,
             marker=dict(colors=_dept_colors[:len(_dept_labels)]),
-            textinfo="label+value+percent", texttemplate="%{label}<br>%{value:.1f} ETP (%{percent})",
-            textfont=dict(size=12))])
-        fig.update_layout(height=300, showlegend=False, margin=dict(l=10,r=10,t=10,b=10))
+            textinfo="label+value+percent",
+            texttemplate="<b>%{label}</b><br><b>%{value:.1f} ETP</b><br>(%{percent})",
+            textfont=dict(size=15),
+            pull=[0.02] * len(_dept_labels),
+            hole=0.25)])
+        fig.update_layout(height=450, showlegend=False, margin=dict(l=20,r=20,t=30,b=20),
+                          title=dict(text="Repartition du personnel par departement", font=dict(size=15)))
         _show_fig(fig, key="ch_rh_pie")
+
+        # ── Resultats ──
+        st.markdown("### Resultats")
 
         # EBITDA / Amort / Interets en batonnets groupes + Resultat Net en ligne
         _ebitda_k = K(_ann["ebitda"])
@@ -6585,7 +6938,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             _enc_i_eur = sum(v[i] for v in _enc_by_pret.values()) * 1000 if _enc_by_pret else 0
             _res_cum_i = res_cum.iloc[i] if i < len(res_cum) else 0
             _fp_quasi = fp_ch + _res_cum_i + pret_rocher_mt  # FP + Quasi-FP
-            _total_passif = _enc_i_eur + fp_ch + _res_cum_i  # Dettes + FP (Rocher est dans enc)
+            _total_passif = _enc_i_eur + fp_ch + _res_cum_i + pret_rocher_mt  # Dettes + FP + Quasi-FP
             ratios.append(_fp_quasi / _total_passif * 100 if _total_passif > 0 else 0)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=_x, y=ratios, name="Ratio solvabilite", mode="lines+markers+text",
@@ -6827,7 +7180,11 @@ def main():
             with _cn2:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("Creer", key="btn_creer_plan", disabled=not nouveau_nom.strip(), use_container_width=True):
-                    p_new = params_defaut()
+                    # Partir des hypotheses du Plan normal s'il existe, sinon des defauts
+                    try:
+                        p_new = charger_plan("Plan normal")
+                    except Exception:
+                        p_new = params_defaut()
                     sauvegarder_plan(nouveau_nom.strip(), p_new)
                     st.session_state["params_charges"] = p_new
                     st.session_state["plan_actif"] = nouveau_nom.strip()

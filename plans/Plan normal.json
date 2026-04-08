@@ -132,7 +132,7 @@
     "Fournitures chambres": 2.5
   },
   "cv_commission_ota_pct": 0.17,
-  "cv_franchise_pct": 0.0,
+  "cv_franchise_pct": 0.05,
   "cv_hebergement": {
     "Blanchisserie": 8.5,
     "Produits accueil": 3.5,
@@ -162,7 +162,7 @@
   "cv_mariage_energie": 150.0,
   "cv_mariage_nettoyage": 1000.0,
   "cv_mariage_pct": 0.35,
-  "cv_divers_consommable": 3.0,
+  "cv_divers_consommable": 1.0,
   "charges_patronales_pct": 0.35,
   "personnel_hebergement": [
     {
@@ -266,12 +266,15 @@
     "Electricite": 20000
   },
   "cf_directs_bar": {
-    "Electricite": 0
+    "Electricite": 4000
   },
   "cf_directs_spa": {
-    "Entretien equipements spa": 8000
+    "Entretien equipements spa": 8000,
+    "Produits soins (stock fixe)": 6000
   },
-  "cf_directs_evenements": {},
+  "cf_directs_evenements": {
+    "Materiel seminaires / mariages": 5000
+  },
   "charges_fixes_indirectes_par_annee": {
     "Assurances": [
       35000,
@@ -378,37 +381,7 @@
       "duree_amort": 5
     },
     {
-      "categorie": "Branding/Communication",
-      "montant": 200000,
-      "duree_amort": 3
-    },
-    {
-      "categorie": "Bornes electriques",
-      "montant": 50000,
-      "duree_amort": 5
-    },
-    {
-      "categorie": "Uniformes travailleurs",
-      "montant": 8666,
-      "duree_amort": 3
-    },
-    {
-      "categorie": "Equipement brasserie",
-      "montant": 75000,
-      "duree_amort": 5
-    },
-    {
-      "categorie": "Vaisselle & couverts brasserie",
-      "montant": 40000,
-      "duree_amort": 3
-    },
-    {
-      "categorie": "Equipement salles",
-      "montant": 25000,
-      "duree_amort": 5
-    },
-    {
-      "categorie": "",
+      "categorie": "Terrain",
       "montant": 0,
       "duree_amort": 0
     },
@@ -420,29 +393,29 @@
   ],
   "investissements_supplementaires": {
     "inv_bornes": {
-      "prix_unite": 50000,
+      "prix_unite": 0,
       "duree_amort": 5,
-      "montant": 50000
+      "montant": 0
     },
     "inv_uniformes": {
-      "prix_unite": 200,
+      "prix_unite": 0,
       "duree_amort": 3,
-      "montant": 8666
+      "montant": 0
     },
     "inv_equip_brass": {
-      "prix_unite": 75000,
+      "prix_unite": 0,
       "duree_amort": 5,
-      "montant": 75000
+      "montant": 0
     },
     "inv_vaisselle": {
-      "prix_unite": 500,
+      "prix_unite": 0,
       "duree_amort": 3,
-      "montant": 40000
+      "montant": 0
     },
     "inv_equip_salles": {
-      "prix_unite": 25000,
+      "prix_unite": 0,
       "duree_amort": 5,
-      "montant": 25000
+      "montant": 0
     }
   },
   "reinvest_pct_an": [
@@ -455,7 +428,7 @@
     0.025,
     0.025,
     0.025,
-    0.03
+    0.025
   ],
   "reinvest_categories": [
     "Amenagements interieurs",
@@ -524,7 +497,7 @@
         "creancier": "Banque",
         "montant": 1500000,
         "taux_annuel": 0.04,
-        "duree_ans": 15,
+        "duree_ans": 2,
         "differe_mois": 0,
         "type": "interet_seul",
         "subside_rw": true
@@ -579,10 +552,8 @@
     }
   ],
   "commentaire_rocher": "L'Immobilière Rocher porte l'ensemble des investissements immobiliers du projet. Ses revenus proviennent principalement du loyer facture au Chateau d'Argenteau et des intérêts perçus sur le prêt intra-groupe. Le résultat est impacté par les charges d'amortissement et le service de la dette externe. A terme, l'entité dégage un résultat positif croissant a mesure que la dette se rembourse tout en bénéficiant d'une trésorerie confortable.",
-  "commentaires": {
-    "after_graph_1": "test"
-  },
-  "commentaire_chateau": "Le Chateau d'Argenteau exploite un hotel de 70 chambres positionne en 4-5 etoiles. Le chiffre d'affaires est genere par l'hebergement, la brasserie, le bar, le spa et la location de salles. En regime de croisiere (taux d'occupation de 62%), le CA hebergement est estime a environ 3.4 M€. La masse salariale represente le poste de charge le plus important avec 42.3 ETP pour 2.33 M€/an. Le loyer verse a l'Immobiliere Rocher s'eleve a 1,440,000 €/an. Le plan vise un EBITDA positif des les premieres annees de croisiere et un retour sur investissement progressif.",
+  "commentaires": {},
+  "commentaire_chateau": "Le Chateau d'Argenteau exploite un hotel de 71 chambres positionne en 5 etoiles. Le chiffre d'affaires est genere par l'hebergement, la brasserie, le bar, le spa et la location de salles. En regime de croisiere (taux d'occupation de 62%), le CA hebergement est estime a environ 3.4 M€. La masse salariale represente le poste de charge le plus important avec 42.3 ETP pour 2.33 M€/an. Le loyer verse a l'Immobiliere Rocher s'eleve a 1,440,000 €/an. Le plan vise un EBITDA positif des les premieres annees de croisiere et un retour sur investissement progressif.",
   "delais_clients": {
     "hebergement_Loisirs": 0,
     "hebergement_Affaires": 0,
@@ -631,12 +602,12 @@
   },
   "cv_franchise_modes": [
     "nuitee",
-    "forfait",
-    "pct"
+    "forfait"
   ],
-  "cv_franchise_par_nuitee": 0.2,
-  "cv_franchise_forfait_mois": 2500.0,
+  "cv_franchise_par_nuitee": 1.2,
+  "cv_franchise_forfait_mois": 5000.0,
   "precompte_annees_actives": [
+    1,
     2,
     3,
     4,
