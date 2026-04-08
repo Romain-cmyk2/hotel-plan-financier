@@ -7583,6 +7583,7 @@ def main():
         _ann = df.groupby("annee").agg({
             "ca_total": "sum", "ca_hebergement": "sum", "ca_brasserie": "sum",
             "ca_bar": "sum", "ca_spa": "sum", "ca_salles": "sum",
+            "ca_loyer_restaurant": "sum",
             "cv_total": "sum", "cv_hebergement": "sum", "cv_brasserie": "sum",
             "cv_bar": "sum", "cv_spa": "sum", "cv_salles": "sum",
             "cf_directs_total": "sum",
@@ -7604,6 +7605,7 @@ def main():
         _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"] - _ann["cf_directs_bar"]
         _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"] - _ann["cf_directs_spa"]
         _ann["marge_salles"] = _ann["ca_salles"] - _ann["cv_salles"] - _ann["cf_directs_evenements"]
+        _ann["marge_resto"] = _ann["ca_loyer_restaurant"]
 
         def _proj_chart(title, traces_config, key_id, height=450, barmode="stack",
                         show_totals=False, total_col=None, extra_lines=None):
@@ -7662,7 +7664,7 @@ def main():
             _proj_chart("Ventes par service + Subside", [
                 ("ca_hebergement","Hebergement","#667eea"),("ca_brasserie","Brasserie","#f5576c"),
                 ("ca_bar","Bar","#ffcc00"),("ca_spa","Spa","#11998e"),("ca_salles","Salles","#a0522d"),
-                ("subside_rw","Subside RW","#f093fb"),
+                ("ca_loyer_restaurant","Location resto.","#ff8c00"),("subside_rw","Subside RW","#f093fb"),
             ], "ca_svc", show_totals=True, total_col="ca_total")
 
             _proj_chart("Charges variables par service", [
@@ -7679,7 +7681,8 @@ def main():
             _proj_chart("Marge par service + Subside", [
                 ("marge_heberg","Hebergement","#667eea"),("marge_brass","Brasserie","#f5576c"),
                 ("marge_bar","Bar","#ffcc00"),("marge_spa","Spa","#11998e"),
-                ("marge_salles","Salles","#a0522d"),("subside_rw","Subside RW","#f093fb"),
+                ("marge_salles","Salles","#a0522d"),("marge_resto","Location resto.","#ff8c00"),
+                ("subside_rw","Subside RW","#f093fb"),
             ], "marge_svc")
 
             st.markdown("### Compte de resultat")
