@@ -381,7 +381,17 @@
       "duree_amort": 5
     },
     {
-      "categorie": "Terrain",
+      "categorie": "Branding/Communication",
+      "montant": 200000,
+      "duree_amort": 3
+    },
+    {
+      "categorie": "Imprevus",
+      "montant": 0,
+      "duree_amort": 0
+    },
+    {
+      "categorie": "",
       "montant": 0,
       "duree_amort": 0
     },
@@ -523,6 +533,16 @@
         "categorie": "Construction",
         "montant": 16194640,
         "duree_amort": 15
+      },
+      {
+        "categorie": "Imprevus",
+        "montant": 0,
+        "duree_amort": 0
+      },
+      {
+        "categorie": "Autres",
+        "montant": 0,
+        "duree_amort": 0
       }
     ],
     "fonds_propres_initial": 6750000,

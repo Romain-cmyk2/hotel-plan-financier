@@ -295,6 +295,7 @@ def params_defaut():
             {"categorie": "Amenagements interieurs", "montant": 1534444, "duree_amort": 10},
             {"categorie": "Mobilier & Equipements", "montant": 2347485, "duree_amort": 5},
             {"categorie": "Branding/Communication", "montant": 200000, "duree_amort": 3},
+            {"categorie": "Imprevus", "montant": 0, "duree_amort": 0},
             {"categorie": "", "montant": 0, "duree_amort": 0},
             {"categorie": "Autre", "montant": 0, "duree_amort": 0},
         ],

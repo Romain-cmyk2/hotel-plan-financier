@@ -1673,7 +1673,7 @@ def tab_hypotheses(p):
 
         # Definition des investissements supplementaires (avec multiplicateurs)
         inv_supp_cats = [
-            ("Bornes electriques", "inv_bornes", None, None),
+            ("Bornes electriques & Panneaux photovolt.", "inv_bornes", None, None),
             ("Uniformes travailleurs", "inv_uniformes", "etp", _total_etp),
             ("Equipement brasserie", "inv_equip_brass", None, None),
             ("Vaisselle & couverts brasserie", "inv_vaisselle", "couverts", _nb_couverts),
@@ -1687,7 +1687,7 @@ def tab_hypotheses(p):
         hcols[2].markdown("**Multiplicateur**"); hcols[3].markdown("**Duree amort. (ans)**"); hcols[4].markdown("**Amort. annuel**")
 
         # ── Investissements classiques (categories fixes) ──
-        _fixed_cats = {"Amenagements interieurs", "Mobilier & Equipements", "Branding/Communication"}
+        _fixed_cats = {"Amenagements interieurs", "Mobilier & Equipements", "Branding/Communication", "Imprevus"}
         _supp_cats_names = {c[0] for c in inv_supp_cats}  # noms des investissements supplementaires
         _all_reserved = _fixed_cats | _supp_cats_names
         new_inv = []
