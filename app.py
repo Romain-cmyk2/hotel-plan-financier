@@ -6193,11 +6193,8 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _prets_ch_mb = p.get("prets", [])
         _total_prets_ch_mb = sum(pr["montant"] for pr in _prets_ch_mb)
         _fp_ch_mb = p.get("fonds_propres_initial", 0)
-        _besoin_treso_ch = 0
-        if "_projection_df" in st.session_state:
-            _df_proj = st.session_state["_projection_df"]
-            _cf_cum = _df_proj["cash_flow"].cumsum()
-            _besoin_treso_ch = abs(min(0, _cf_cum.min()))
+        _cf_cum_rpt = df_rpt["cash_flow"].cumsum()
+        _besoin_treso_ch = abs(min(0, _cf_cum_rpt.min()))
         _total_moyens_ch_mb = _total_prets_ch_mb + _fp_ch_mb
         _total_besoins_ch_mb = _total_inv_ch_mb + _besoin_treso_ch
         _solde_ch_mb = _total_moyens_ch_mb - _total_besoins_ch_mb
