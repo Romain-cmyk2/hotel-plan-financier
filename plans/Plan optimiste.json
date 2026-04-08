@@ -119,6 +119,8 @@
   "mariage_nb_convives_moy": 120,
   "mariage_prix_convive": 95,
   "mariage_prix_location": 5000,
+  "mariage_catering_prix_convive": 95,
+  "mariage_commission_catering_pct": 0.10,
   "divers_prix_nuitee": 3.0,
   "divers_taux": 1.0,
   "loyer_restaurant_mensuel": 5860,
@@ -131,6 +133,9 @@
   },
   "cv_commission_ota_pct": 0.17,
   "cv_franchise_pct": 0.04,
+  "cv_franchise_par_nuitee": 0.0,
+  "cv_franchise_forfait_mois": 0.0,
+  "cv_franchise_modes": ["pct"],
   "cv_hebergement": {
     "Blanchisserie": 8.5,
     "Produits accueil": 3.5,
@@ -140,9 +145,11 @@
     "Divers": 5.0
   },
   "cv_brasserie_pct": 0.35,
+  "cv_eau_brasserie_par_client": 0.0,
   "cv_bar_beverage_pct": 0.3,
   "cv_bar_consommable_unite": 0.2,
   "cv_bar_pct": 0.25,
+  "cv_eau_bar_par_client": 0.0,
   "cv_spa_soin_cout": 50.0,
   "cv_spa_produits_soin": 5.0,
   "cv_spa_consommable_entree": 1.5,
@@ -254,7 +261,12 @@
     "salles": 0.1
   },
   "cf_directs_hebergement": {},
-  "cf_directs_brasserie": {},
+  "cf_directs_brasserie": {
+    "Electricite": 0
+  },
+  "cf_directs_bar": {
+    "Electricite": 0
+  },
   "cf_directs_spa": {},
   "personnel_evenements": [],
   "cf_directs_evenements": {},
@@ -354,16 +366,6 @@
   "inflation_an": 0.025,
   "investissements": [
     {
-      "categorie": "Terrain",
-      "montant": 0,
-      "duree_amort": 0
-    },
-    {
-      "categorie": "Construction",
-      "montant": 0,
-      "duree_amort": 0
-    },
-    {
       "categorie": "Amenagements interieurs",
       "montant": 270000,
       "duree_amort": 10
@@ -374,11 +376,28 @@
       "duree_amort": 5
     },
     {
-      "categorie": "Branding",
+      "categorie": "Branding/Communication",
       "montant": 200000,
       "duree_amort": 3
+    },
+    {
+      "categorie": "",
+      "montant": 0,
+      "duree_amort": 0
+    },
+    {
+      "categorie": "Autre",
+      "montant": 0,
+      "duree_amort": 0
     }
   ],
+  "investissements_supplementaires": {
+    "inv_bornes": {"prix_unite": 0, "duree_amort": 5, "montant": 0},
+    "inv_uniformes": {"prix_unite": 0, "duree_amort": 3, "montant": 0},
+    "inv_equip_brass": {"prix_unite": 0, "duree_amort": 5, "montant": 0},
+    "inv_vaisselle": {"prix_unite": 0, "duree_amort": 3, "montant": 0},
+    "inv_equip_salles": {"prix_unite": 0, "duree_amort": 5, "montant": 0}
+  },
   "reinvest_pct_an": [
     0.0,
     0.005,

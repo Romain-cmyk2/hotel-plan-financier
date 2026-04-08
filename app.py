@@ -360,12 +360,16 @@ def _render_hypotheses_charts(df, indic, params_hyp=None):
     if "ca_brasserie" in df.columns and "ca_pdj" in df.columns:
         df["ca_brasserie_hors_pdj"] = df["ca_brasserie"] - df["ca_pdj"]
 
+    # Colonne mariages total (location + commission catering)
+    if "ca_mariages" in df.columns and "ca_commission_catering" in df.columns:
+        df["ca_mariages_total"] = df["ca_mariages"] + df["ca_commission_catering"]
+
     containers = st.session_state["chart_containers"]
 
     chart_configs = {
         "hebergement": [
             ("ca_hebergement", "CA Hebergement / an", "#4facfe"),
-            ("ca_divers", "CA Divers (mini-bar, blanchisserie) / an", "#f093fb"),
+            ("ca_divers", "CA Divers (mini-bar, ...) / an", "#f093fb"),
             ("nuitees", "Nuitees / an", "#764ba2"),
         ],
         "brasserie": [
@@ -382,7 +386,7 @@ def _render_hypotheses_charts(df, indic, params_hyp=None):
             ("ca_seminaires", "CA Seminaires / an", "#667eea"),
         ],
         "mariages": [
-            ("ca_mariages", "CA Mariages / an", "#f093fb"),
+            ("ca_mariages_total", "CA Mariages (location + catering) / an", "#f093fb"),
         ],
         "salles_chateau": [
             ("ca_salles_chateau", "CA Salles chateau / an", "#a0522d"),
@@ -771,37 +775,63 @@ def _render_hypotheses_charts(df, indic, params_hyp=None):
 
 # ─── Onglet Hypotheses (corps principal, pleine largeur) ─────────────────────
 
-def _personnel_table(p, personnel_list, key_prefix, cp):
-    """Affiche un tableau personnel editable avec ajout/suppression."""
+def _personnel_table(p, personnel_list, key_prefix, cp, nb_chambres=None, ratio_base=None, ratio_label="ETP/10", allow_delete=True):
+    """Affiche un tableau personnel editable avec ajout/suppression.
+    Si ratio_base est fourni, affiche le ratio ETP / (ratio_base/10) par ligne.
+    nb_chambres est un alias pour ratio_base (retro-compatibilite)."""
+    if ratio_base is None and nb_chambres is not None:
+        ratio_base = nb_chambres
     # Init session state for this table
     state_key = f"_pers_{key_prefix}"
+    version_key = f"_pers_ver_{key_prefix}"
     if state_key not in st.session_state:
         st.session_state[state_key] = list(personnel_list)
+    if version_key not in st.session_state:
+        st.session_state[version_key] = 0
+    _ver = st.session_state[version_key]
 
     current = st.session_state[state_key]
     new_list = []
     to_delete = []
 
     for i, pers in enumerate(current):
-        c1, c2, c3, c4, c5 = st.columns([3, 1.5, 2, 2, 0.5])
+        if ratio_base and allow_delete:
+            c1, c2, c2b, c3, c4a, c4b, c5 = st.columns([3, 1.5, 1.0, 2, 1.5, 1.5, 0.5])
+        elif ratio_base:
+            c1, c2, c2b, c3, c4a, c4b = st.columns([3, 1.5, 1.0, 2, 1.5, 1.5])
+        elif allow_delete:
+            c1, c2, c3, c4a, c4b, c5 = st.columns([3, 1.5, 2, 1.5, 1.5, 0.5])
+        else:
+            c1, c2, c3, c4a, c4b = st.columns([3, 1.5, 2, 1.5, 1.5])
         with c1:
-            poste = st.text_input("p", pers["poste"], key=f"{key_prefix}_p_{i}", label_visibility="collapsed")
+            poste = st.text_input("p", pers["poste"], key=f"{key_prefix}_p_{_ver}_{i}", label_visibility="collapsed")
         with c2:
-            etp = st.number_input("e", 0.0, 50.0, float(pers["etp"]), step=0.5, key=f"{key_prefix}_e_{i}", label_visibility="collapsed")
+            etp = st.number_input("e", 0.0, 50.0, float(pers["etp"]), step=0.5, key=f"{key_prefix}_e_{_ver}_{i}", label_visibility="collapsed")
+        if ratio_base:
+            with c2b:
+                ratio = etp / (ratio_base / 10) if ratio_base > 0 else 0
+                st.markdown(f"*{ratio:.2f}*")
         with c3:
-            cout = st.number_input("c", 0, 250_000, int(pers["cout_brut"]), step=1_000, key=f"{key_prefix}_c_{i}", label_visibility="collapsed")
-        with c4:
-            st.markdown(f"**{cout * (1 + cp) * etp:,.0f} \u20ac**")
-        with c5:
-            _visu = st.session_state.get("_visu_mode", False)
-            if st.button("\U0001F5D1", key=f"{key_prefix}_del_{i}", help="Supprimer", disabled=_visu):
-                to_delete.append(i)
+            cout = st.number_input("c", 0, 250_000, int(pers["cout_brut"]), step=1_000, key=f"{key_prefix}_c_{_ver}_{i}", label_visibility="collapsed")
+        with c4a:
+            _cout_an_etp = cout * (1 + cp)
+            st.markdown(f'<div style="text-align:center"><b>{_cout_an_etp:,.0f} \u20ac</b></div>', unsafe_allow_html=True)
+        with c4b:
+            _cout_an_total = cout * (1 + cp) * etp
+            st.markdown(f'<div style="text-align:center"><b>{_cout_an_total:,.0f} \u20ac</b></div>', unsafe_allow_html=True)
+        if allow_delete:
+            with c5:
+                _visu = st.session_state.get("_visu_mode", False)
+                if st.button("\U0001F5D1", key=f"{key_prefix}_del_{_ver}_{i}", help="Supprimer", disabled=_visu):
+                    to_delete.append(i)
         new_list.append({"poste": poste, "etp": etp, "cout_brut": cout})
 
     # Supprimer les entrées marquées
     if to_delete:
-        new_list = [e for idx, e in enumerate(new_list) if idx not in to_delete]
-        st.session_state[state_key] = new_list
+        # Reconstruire depuis current (source de verite), pas depuis new_list (valeurs widget)
+        cleaned = [e for idx, e in enumerate(current) if idx not in to_delete]
+        st.session_state[state_key] = cleaned
+        st.session_state[version_key] = _ver + 1
         st.rerun()
 
     # Bouton ajouter
@@ -815,12 +845,19 @@ def _personnel_table(p, personnel_list, key_prefix, cp):
     return new_list
 
 
-def _cf_grid(p, cf_dict, key_prefix, nb_cols=4, charts=None):
+def _cf_grid(p, cf_dict, key_prefix, nb_cols=4, charts=None, protected_keys=None):
     """Affiche une grille de charges fixes editables avec ajout/suppression.
-    'Energie fixe' a un graphique retractable, 'Precompte immobilier' un popover annees."""
+    'Energie fixe' a un graphique retractable, 'Precompte immobilier' un popover annees.
+    protected_keys : set de noms de charges qui ne peuvent pas etre supprimees."""
+    if protected_keys is None:
+        protected_keys = set()
     state_key = f"_cf_{key_prefix}"
+    version_key = f"_cf_ver_{key_prefix}"
     if state_key not in st.session_state:
         st.session_state[state_key] = dict(cf_dict)
+    if version_key not in st.session_state:
+        st.session_state[version_key] = 0
+    _ver = st.session_state[version_key]
 
     current = st.session_state[state_key]
     new_cf = {}
@@ -829,16 +866,19 @@ def _cf_grid(p, cf_dict, key_prefix, nb_cols=4, charts=None):
 
     for i, (k, v) in enumerate(items):
         is_energie = "nergie" in k and "fixe" in k.lower()
-        is_precompte = "recompte" in k
+        is_precompte = "recompte" in k or "fonciere" in k.lower() or "fonci" in k.lower()
 
         c1, c2, c3, c4 = st.columns([3, 2, 0.5, 0.5])
         with c1:
-            new_label = st.text_input("l", k, key=f"{key_prefix}_l_{i}", label_visibility="collapsed")
+            new_label = st.text_input("l", k, key=f"{key_prefix}_l_{_ver}_{i}", label_visibility="collapsed")
         with c2:
-            new_val = st.number_input("v", 0, 1_000_000, int(v), step=1_000, key=f"{key_prefix}_v_{i}", label_visibility="collapsed")
+            new_val = st.number_input("v", 0, 1_000_000, int(v), step=1_000, key=f"{key_prefix}_v_{_ver}_{i}", label_visibility="collapsed")
         with c3:
+            _is_protected = k in protected_keys
             _visu = st.session_state.get("_visu_mode", False)
-            if st.button("\U0001F5D1", key=f"{key_prefix}_del_{i}", help="Supprimer", disabled=_visu):
+            if _is_protected:
+                st.markdown("")  # placeholder vide
+            elif st.button("\U0001F5D1", key=f"{key_prefix}_del_{_ver}_{i}", help="Supprimer", disabled=_visu):
                 to_delete.append(i)
         with c4:
             if is_energie:
@@ -847,11 +887,11 @@ def _cf_grid(p, cf_dict, key_prefix, nb_cols=4, charts=None):
                     st.session_state[_ek] = False
                 st.session_state[_ek] = st.checkbox("\u26A1 Detail",
                     value=st.session_state[_ek],
-                    key=f"{key_prefix}_enrg_{i}",
+                    key=f"{key_prefix}_enrg_{_ver}_{i}",
                     help="Afficher/masquer le graphique energie fixe + variable")
             elif is_precompte:
                 with st.popover("\U0001F4C5", help="Annees d'application"):
-                    st.markdown("**Annees d'application du precompte**")
+                    st.markdown("**Annees d'application de la taxe fonciere**")
                     nb_annees_proj = p.get("nb_mois_projection", 204) // 12 + 1
                     annees_list = list(range(1, nb_annees_proj + 1))
                     default_actives = p.get("precompte_annees_actives", annees_list)
@@ -879,11 +919,15 @@ def _cf_grid(p, cf_dict, key_prefix, nb_cols=4, charts=None):
             if "_projection_df" in st.session_state:
                 _df_e = st.session_state["_projection_df"]
                 _cv_en = p.get("cv_hebergement_par_nuitee", {}).get("Energie variable", 10.0)
+                # Electricite fixe = Energie fixe (indirect) + Electricite brasserie + Electricite bar
+                _elec_brass = p.get("cf_directs_brasserie", {}).get("Electricite", 0) if isinstance(p.get("cf_directs_brasserie"), dict) else 0
+                _elec_bar = p.get("cf_directs_bar", {}).get("Electricite", 0) if isinstance(p.get("cf_directs_bar"), dict) else 0
+                _fix_total_an = new_val + _elec_brass + _elec_bar
                 _annual_e = _df_e.groupby("annee").agg({"nuitees": "sum"}).reset_index()
                 _x_e = [str(int(a)) for a in _annual_e["annee"]]
                 _var_e = _annual_e["nuitees"] * _cv_en
-                _fix_e = [new_val] * len(_annual_e)
-                _tot_e = _var_e + new_val
+                _fix_e = [_fix_total_an] * len(_annual_e)
+                _tot_e = _var_e + _fix_total_an
                 _fig_e = go.Figure()
                 _fig_e.add_trace(go.Bar(x=_x_e, y=[vv/1000 for vv in _fix_e],
                     name="Fixe", marker_color="#667eea",
@@ -910,7 +954,14 @@ def _cf_grid(p, cf_dict, key_prefix, nb_cols=4, charts=None):
                 st.caption("Le graphique sera disponible apres le premier calcul de projection.")
 
     if to_delete:
-        st.session_state[state_key] = new_cf
+        # Reconstruire le dict depuis les items originaux (source de verite), en excluant les supprimes
+        cleaned = {}
+        for j, (orig_k, orig_v) in enumerate(items):
+            if j not in to_delete:
+                cleaned[orig_k] = orig_v
+        st.session_state[state_key] = cleaned
+        # Incrementer la version pour que tous les widgets aient de nouvelles cles
+        st.session_state[version_key] = _ver + 1
         st.rerun()
 
     # Bouton ajouter
@@ -1107,7 +1158,7 @@ def tab_hypotheses(p):
             p["hausse_prix_an"] = [0.0, h2, h3, h4]
 
             st.markdown("---")
-            st.markdown("**Produits divers** (mini-bar, blanchisserie, ...)")
+            st.markdown("**Produits divers** (mini-bar, ...)")
             c1, c2 = st.columns(2)
             with c1:
                 p["divers_prix_nuitee"] = st.number_input("Consommation par chambre (\u20ac)", 0.0, 50.0, float(p.get("divers_prix_nuitee", 3)), step=0.5, key="divers_prix")
@@ -1285,6 +1336,9 @@ def tab_hypotheses(p):
                 st.markdown('<div class="section-header">\U0001F492 Mariages / Evenements</div>', unsafe_allow_html=True)
                 p["mariage_nb_an"] = st.number_input("Nb mariages / an", 0, 50, p["mariage_nb_an"], key="mar_nb")
                 p["mariage_prix_location"] = st.number_input("Location salle (\u20ac)", 0, 50000, p["mariage_prix_location"], step=100, key="mar_loc")
+                p["mariage_nb_convives_moy"] = st.number_input("Convives moyens / mariage", 10, 500, int(p.get("mariage_nb_convives_moy", 120)), key="mar_conv")
+                p["mariage_catering_prix_convive"] = st.number_input("Prix catering / convive (\u20ac)", 0, 500, int(p.get("mariage_catering_prix_convive", 95)), step=5, key="mar_cat_prix")
+                p["mariage_commission_catering_pct"] = st.number_input("Commission catering (%)", 0.0, 50.0, float(p.get("mariage_commission_catering_pct", 0.10)) * 100, step=1.0, format="%.1f", key="mar_cat_pct") / 100
             with c3:
                 st.markdown('<div class="section-header">\U0001F3F0 Salles du chateau</div>', unsafe_allow_html=True)
                 p["salles_chateau_nb_an"] = st.number_input("Nb locations / an", 0, 200, int(p.get("salles_chateau_nb_an", 30)), key="chateau_nb")
@@ -1341,7 +1395,7 @@ def tab_hypotheses(p):
                 p["cv_commission_cb_pct_chambres"] = st.number_input("% chambres payees par CB", 0.0, 1.0, float(p.get("cv_commission_cb_pct_chambres", 0.80)), step=0.05, format="%.2f", key="cv_cb_pct")
 
             st.markdown("---")
-            st.markdown("**Consommables produits divers** (lies aux ventes mini-bar, blanchisserie)")
+            st.markdown("**Consommables produits divers** (lies aux ventes mini-bar, ...)")
             col_div, _ = st.columns([1, 2])
             with col_div:
                 p["cv_divers_consommable"] = st.number_input("Cout consommable divers (\u20ac / nuitee)", 0.0, 20.0, float(p.get("cv_divers_consommable", 1.0)), step=0.5, format="%.2f", key="cv_divers_conso")
@@ -1378,10 +1432,27 @@ def tab_hypotheses(p):
 
             st.markdown("---")
             # Franchise en dernier
-            st.markdown("**Cout franchise (% du CA hebergement)**")
-            col_fr, _ = st.columns([1, 2])
-            with col_fr:
-                p["cv_franchise_pct"] = st.number_input("Taux franchise", 0.0, 0.20, float(p.get("cv_franchise_pct", 0.04)), step=0.01, format="%.2f", key="cv_franchise")
+            st.markdown("**Cout franchise**")
+            _modes_options = {"pct": "% du CA hebergement", "nuitee": "\u20ac par nuitee", "forfait": "Forfait par mois"}
+            _modes_default = p.get("cv_franchise_modes", ["pct"])
+            _modes_sel = st.multiselect("Modalites de la franchise", options=list(_modes_options.keys()),
+                                        default=[m for m in _modes_default if m in _modes_options],
+                                        format_func=lambda x: _modes_options[x], key="franchise_modes")
+            p["cv_franchise_modes"] = _modes_sel
+
+            _fr_cols = st.columns(max(len(_modes_sel), 1))
+            _col_idx = 0
+            if "pct" in _modes_sel:
+                with _fr_cols[_col_idx]:
+                    p["cv_franchise_pct"] = st.number_input("Taux franchise (% CA)", 0.0, 0.20, float(p.get("cv_franchise_pct", 0.04)), step=0.01, format="%.2f", key="cv_franchise")
+                _col_idx += 1
+            if "nuitee" in _modes_sel:
+                with _fr_cols[_col_idx]:
+                    p["cv_franchise_par_nuitee"] = st.number_input("Franchise (\u20ac/nuitee)", 0.0, 50.0, float(p.get("cv_franchise_par_nuitee", 0)), step=0.5, format="%.2f", key="cv_franchise_nuitee")
+                _col_idx += 1
+            if "forfait" in _modes_sel:
+                with _fr_cols[_col_idx]:
+                    p["cv_franchise_forfait_mois"] = st.number_input("Forfait franchise (\u20ac/mois)", 0.0, 50000.0, float(p.get("cv_franchise_forfait_mois", 0)), step=100.0, format="%.0f", key="cv_franchise_forfait")
 
             charts["cv_detail_heberg"] = st.container()
 
@@ -1389,20 +1460,24 @@ def tab_hypotheses(p):
 
         # ── CV Brasserie ──
         with st.expander("\U0001F37D **Brasserie**", expanded=False):
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             with c1:
                 p["cv_brasserie_pct"] = st.number_input("Food cost midi & soir (% CA)", 0.0, 1.0, p["cv_brasserie_pct"], step=0.01, format="%.2f", key="cv_brass")
             with c2:
                 p["cv_pdj_pct"] = st.number_input("Cout petit-dejeuner (% CA PDJ)", 0.0, 1.0, float(p.get("cv_pdj_pct", p.get("cv_brasserie_pct", 0.35))), step=0.01, format="%.2f", key="cv_pdj")
+            with c3:
+                p["cv_eau_brasserie_par_client"] = st.number_input("Eau (\u20ac/couvert)", 0.0, 10.0, float(p.get("cv_eau_brasserie_par_client", 0)), step=0.1, format="%.2f", key="cv_eau_brass")
             charts["cv_brasserie"] = st.container()
 
         # ── CV Bar ──
         with st.expander("\U0001F378 **Bar**", expanded=False):
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             with c1:
                 p["cv_bar_pct"] = st.number_input("Cout boissons (% CA)", 0.0, 1.0, p["cv_bar_pct"], step=0.01, format="%.2f", key="cv_bar")
             with c2:
                 p["cv_bar_consommable_unite"] = st.number_input("Consommables (serviettes, bougies...) \u20ac/conso", 0.0, 5.0, float(p.get("cv_bar_consommable_unite", 0.20)), step=0.1, format="%.2f", key="cv_bar_conso")
+            with c3:
+                p["cv_eau_bar_par_client"] = st.number_input("Eau (\u20ac/client)", 0.0, 10.0, float(p.get("cv_eau_bar_par_client", 0)), step=0.1, format="%.2f", key="cv_eau_bar")
             charts["cv_bar"] = st.container()
 
         # ── CV Spa ──
@@ -1444,7 +1519,7 @@ def tab_hypotheses(p):
 
         # ── CV Mariages ──
         with st.expander("\U0001F492 **Mariages**", expanded=False):
-            p["mariage_nb_convives_moy"] = st.number_input("Convives moyens / mariage", 10, 500, int(p.get("mariage_nb_convives_moy", 120)), key="mar_conv_cv")
+            st.info(f"Convives moyens / mariage : **{int(p.get('mariage_nb_convives_moy', 120))}** (modifiable dans Hypotheses de vente)")
             st.markdown("**Couts par mariage**")
             c1, c2 = st.columns(2)
             with c1:
@@ -1479,45 +1554,60 @@ def tab_hypotheses(p):
         # ── Hébergement ──
         with st.expander("\U0001F6CF **Hebergement**", expanded=False):
             st.markdown("**Personnel**")
-            hcols = st.columns([3, 1.5, 2, 2])
-            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout charge**")
-            p["personnel_hebergement"] = _personnel_table(p, p["personnel_hebergement"], "ph", cp)
+            _nb_ch = p.get("nb_chambres", 70)
+            hcols = st.columns([3, 1.5, 1.0, 2, 1.5, 1.5])
+            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**ETP/10 ch.**"); hcols[3].markdown("**Brut/an**"); hcols[4].markdown("**Cout/an/ETP**"); hcols[5].markdown("**Cout total/an**")
+            p["personnel_hebergement"] = _personnel_table(p, p["personnel_hebergement"], "ph", cp, nb_chambres=_nb_ch, allow_delete=False)
             st.markdown("**Autres frais fixes directs**")
             p["cf_directs_hebergement"] = _cf_grid(p, p["cf_directs_hebergement"], "cfdh", 3)
 
         # ── Brasserie ──
         with st.expander("\U0001F37D **Brasserie**", expanded=False):
             st.markdown("**Personnel**")
-            hcols = st.columns([3, 1.5, 2, 2])
-            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout charge**")
-            p["personnel_brasserie"] = _personnel_table(p, p["personnel_brasserie"], "pb", cp)
+            _nb_couv = p.get("nb_couverts_brasserie", 80)
+            hcols = st.columns([3, 1.5, 1.0, 2, 1.5, 1.5])
+            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**ETP/10 couv.**"); hcols[3].markdown("**Brut/an**"); hcols[4].markdown("**Cout/an/ETP**"); hcols[5].markdown("**Cout total/an**")
+            p["personnel_brasserie"] = _personnel_table(p, p["personnel_brasserie"], "pb", cp, ratio_base=_nb_couv, allow_delete=False)
             st.markdown("**Autres frais fixes directs**")
-            p["cf_directs_brasserie"] = _cf_grid(p, p["cf_directs_brasserie"], "cfdb", 2)
+            p["cf_directs_brasserie"] = _cf_grid(p, p["cf_directs_brasserie"], "cfdb", 2, protected_keys={"Electricite"})
+
+        # ── Bar ──
+        with st.expander("\U0001F378 **Bar**", expanded=False):
+            st.markdown("**Personnel**")
+            hcols = st.columns([3, 1.5, 2, 1.5, 1.5])
+            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout/an/ETP**"); hcols[4].markdown("**Cout total/an**")
+            p["personnel_bar"] = _personnel_table(p, p.get("personnel_bar", []), "pbar", cp, allow_delete=False)
+            st.markdown("**Autres frais fixes directs**")
+            if "cf_directs_bar" not in p or not isinstance(p["cf_directs_bar"], dict):
+                p["cf_directs_bar"] = {"Electricite": 0}
+            p["cf_directs_bar"] = _cf_grid(p, p["cf_directs_bar"], "cfdbar", 2, protected_keys={"Electricite"})
 
         # ── Spa ──
         with st.expander("\U0001F9D6 **Spa**", expanded=False):
             st.markdown("**Personnel**")
-            hcols = st.columns([3, 1.5, 2, 2])
-            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout charge**")
-            p["personnel_spa"] = _personnel_table(p, p["personnel_spa"], "ps", cp)
+            hcols = st.columns([3, 1.5, 2, 1.5, 1.5])
+            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout/an/ETP**"); hcols[4].markdown("**Cout total/an**")
+            p["personnel_spa"] = _personnel_table(p, p["personnel_spa"], "ps", cp, allow_delete=False)
             st.markdown("**Autres frais fixes directs**")
             p["cf_directs_spa"] = _cf_grid(p, p["cf_directs_spa"], "cfds", 2)
 
         # ── Evenements ──
         with st.expander("\U0001F4BC **Evenements (seminaires, mariages)**", expanded=False):
             st.markdown("**Personnel**")
-            hcols = st.columns([3, 1.5, 2, 2])
-            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout charge**")
-            p["personnel_evenements"] = _personnel_table(p, p.get("personnel_evenements", []), "pe", cp)
+            hcols = st.columns([3, 1.5, 2, 1.5, 1.5])
+            hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout/an/ETP**"); hcols[4].markdown("**Cout total/an**")
+            p["personnel_evenements"] = _personnel_table(p, p.get("personnel_evenements", []), "pe", cp, allow_delete=False)
             st.markdown("**Autres frais fixes directs**")
             p["cf_directs_evenements"] = _cf_grid(p, p["cf_directs_evenements"], "cfde", 2)
 
         # Totaux
         st.markdown("---")
-        all_pers = p["personnel_hebergement"] + p["personnel_brasserie"] + p["personnel_spa"] + p.get("personnel_evenements", [])
+        all_pers = p["personnel_hebergement"] + p["personnel_brasserie"] + p.get("personnel_bar", []) + p["personnel_spa"] + p.get("personnel_evenements", [])
         total_etp_dir = sum(pe["etp"] for pe in all_pers)
         total_masse_dir = sum(pe["cout_brut"] * (1 + cp) * pe["etp"] for pe in all_pers)
+        _cf_bar_dict = p.get("cf_directs_bar", {}) if isinstance(p.get("cf_directs_bar"), dict) else {}
         total_cf_dir = (sum(p["cf_directs_hebergement"].values()) + sum(p["cf_directs_brasserie"].values()) +
+                        sum(_cf_bar_dict.values()) +
                         sum(p["cf_directs_spa"].values()) + sum(p["cf_directs_evenements"].values()))
         st.info(f"**Total frais fixes directs : {total_etp_dir:.1f} ETP | "
                 f"Personnel : {total_masse_dir:,.0f} \u20ac/an | "
@@ -1535,8 +1625,8 @@ def tab_hypotheses(p):
 
         # Personnel indirect
         st.markdown('<div class="section-header">\U0001F465 Personnel indirect</div>', unsafe_allow_html=True)
-        hcols = st.columns([3, 1.5, 2, 2])
-        hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout charge**")
+        hcols = st.columns([3, 1.5, 2, 1.5, 1.5])
+        hcols[0].markdown("**Poste**"); hcols[1].markdown("**ETP**"); hcols[2].markdown("**Brut/an**"); hcols[3].markdown("**Cout/an/ETP**"); hcols[4].markdown("**Cout total/an**")
         cp = p["charges_patronales_pct"]
         p["personnel_indirect"] = _personnel_table(p, p["personnel_indirect"], "pi", cp)
 
@@ -1573,24 +1663,126 @@ def tab_hypotheses(p):
         st.subheader("Investissements & Financement")
 
         st.markdown('<div class="section-header">\U0001F3D7 Investissements & Amortissements</div>', unsafe_allow_html=True)
-        new_inv = []
-        hcols = st.columns([4, 2, 1.5, 2])
-        hcols[0].markdown("**Categorie**"); hcols[1].markdown("**Montant (\u20ac)**")
-        hcols[2].markdown("**Duree amort. (ans)**"); hcols[3].markdown("**Amort. annuel**")
 
-        for i, inv in enumerate(p["investissements"]):
-            c1, c2, c3, c4 = st.columns([4, 2, 1.5, 2])
+        # Calcul ETP total et couverts pour les investissements avec multiplicateur
+        _all_pers_inv = (p.get("personnel_hebergement", []) + p.get("personnel_brasserie", []) +
+                         p.get("personnel_bar", []) + p.get("personnel_spa", []) +
+                         p.get("personnel_evenements", []) + p.get("personnel_indirect", []))
+        _total_etp = sum(pe["etp"] for pe in _all_pers_inv)
+        _nb_couverts = p.get("nb_couverts_brasserie", 80)
+
+        # Definition des investissements supplementaires (avec multiplicateurs)
+        inv_supp_cats = [
+            ("Bornes electriques", "inv_bornes", None, None),
+            ("Uniformes travailleurs", "inv_uniformes", "etp", _total_etp),
+            ("Equipement brasserie", "inv_equip_brass", None, None),
+            ("Vaisselle & couverts brasserie", "inv_vaisselle", "couverts", _nb_couverts),
+            ("Equipement salles", "inv_equip_salles", None, None),
+        ]
+        inv_supp_saved = p.get("investissements_supplementaires", {})
+
+        # En-tetes
+        hcols = st.columns([3, 2, 1.5, 1.5, 2])
+        hcols[0].markdown("**Categorie**"); hcols[1].markdown("**Montant (\u20ac)**")
+        hcols[2].markdown("**Multiplicateur**"); hcols[3].markdown("**Duree amort. (ans)**"); hcols[4].markdown("**Amort. annuel**")
+
+        # ── Investissements classiques (categories fixes) ──
+        _fixed_cats = {"Amenagements interieurs", "Mobilier & Equipements", "Branding/Communication"}
+        _supp_cats_names = {c[0] for c in inv_supp_cats}  # noms des investissements supplementaires
+        _all_reserved = _fixed_cats | _supp_cats_names
+        new_inv = []
+        # Separer les investissements fixes des lignes libres (affichees en fin)
+        _inv_fixes = [inv for inv in p["investissements"] if inv["categorie"] in _fixed_cats]
+        _inv_libres = [inv for inv in p["investissements"] if inv["categorie"] not in _all_reserved]
+        # S'assurer qu'il y a exactement 1 ligne libre + 1 "Autre"
+        _inv_libres_sans_autre = [inv for inv in _inv_libres if inv["categorie"] != "Autre"]
+        _inv_autre = [inv for inv in _inv_libres if inv["categorie"] == "Autre"]
+        if len(_inv_libres_sans_autre) == 0:
+            _inv_libres_sans_autre = [{"categorie": "", "montant": 0, "duree_amort": 0}]
+        if len(_inv_libres_sans_autre) > 1:
+            _inv_libres_sans_autre = [_inv_libres_sans_autre[0]]
+        if len(_inv_autre) == 0:
+            _inv_autre = [{"categorie": "Autre", "montant": 0, "duree_amort": 0}]
+        if len(_inv_autre) > 1:
+            _inv_autre = [_inv_autre[0]]
+        _inv_libres = _inv_libres_sans_autre + _inv_autre
+
+        # Afficher les categories fixes (non modifiables)
+        for i, inv in enumerate(_inv_fixes):
+            c1, c2, c3, c4, c5 = st.columns([3, 2, 1.5, 1.5, 2])
             with c1:
-                cat = st.text_input("cat", inv["categorie"], key=f"inv_c_{i}", label_visibility="collapsed")
+                st.markdown(f"**{inv['categorie']}**")
             with c2:
                 mont = st.number_input("mt", 0, 20_000_000, inv["montant"], step=50_000, key=f"inv_m_{i}", label_visibility="collapsed")
             with c3:
-                dur = st.number_input("dur", 0, 30, inv["duree_amort"], key=f"inv_d_{i}", label_visibility="collapsed")
+                st.markdown("*-*")
             with c4:
+                dur = st.number_input("dur", 0, 30, inv["duree_amort"], key=f"inv_d_{i}", label_visibility="collapsed")
+            with c5:
                 amort_an = mont / dur if dur > 0 else 0
-                st.markdown(f"**{amort_an:,.0f} \u20ac**" if dur > 0 else "*Non amorti*")
+                st.markdown(f'<div style="text-align:center"><b>{amort_an:,.0f} \u20ac</b></div>' if dur > 0 else '<div style="text-align:center"><i>Non amorti</i></div>', unsafe_allow_html=True)
+            new_inv.append({"categorie": inv["categorie"], "montant": mont, "duree_amort": dur})
+
+        # ── Investissements supplementaires (avec multiplicateurs) ──
+        inv_supp_new = {}
+        for cat_name, key, mult_type, mult_val in inv_supp_cats:
+            saved = inv_supp_saved.get(key, {})
+            c1, c2, c3, c4, c5 = st.columns([3, 2, 1.5, 1.5, 2])
+            with c1:
+                st.markdown(f"**{cat_name}**")
+            with c2:
+                if mult_type is not None:
+                    prix_u = st.number_input("prix", 0, 500_000, int(saved.get("prix_unite", 0)),
+                                             step=50, key=f"{key}_prix", label_visibility="collapsed")
+                else:
+                    prix_u = st.number_input("mt", 0, 5_000_000, int(saved.get("prix_unite", 0)),
+                                             step=1000, key=f"{key}_prix", label_visibility="collapsed")
+            with c3:
+                if mult_type == "etp":
+                    montant_calc = round(prix_u * _total_etp)
+                    st.markdown(f"x {_total_etp:.1f} ETP = **{montant_calc:,.0f} \u20ac**")
+                elif mult_type == "couverts":
+                    montant_calc = round(prix_u * _nb_couverts)
+                    st.markdown(f"x {_nb_couverts} couv. = **{montant_calc:,.0f} \u20ac**")
+                else:
+                    st.markdown("*-*")
+                    montant_calc = prix_u
+            with c4:
+                dur_s = st.number_input("dur", 0, 30, int(saved.get("duree_amort", 3)),
+                                        key=f"{key}_dur", label_visibility="collapsed")
+            with c5:
+                amort_s = montant_calc / dur_s if dur_s > 0 else 0
+                st.markdown(f'<div style="text-align:center"><b>{amort_s:,.0f} \u20ac</b></div>' if dur_s > 0 else '<div style="text-align:center"><i>Non amorti</i></div>', unsafe_allow_html=True)
+
+            inv_supp_new[key] = {"prix_unite": prix_u, "duree_amort": dur_s, "montant": montant_calc}
+            if montant_calc > 0:
+                new_inv.append({"categorie": cat_name, "montant": montant_calc, "duree_amort": dur_s})
+
+        # ── Lignes libres (intitule modifiable + "Autre") en fin ──
+        _offset_libre = len(_inv_fixes) + len(inv_supp_cats)
+        for j, inv in enumerate(_inv_libres):
+            _is_autre = inv["categorie"] == "Autre"
+            c1, c2, c3, c4, c5 = st.columns([3, 2, 1.5, 1.5, 2])
+            with c1:
+                if _is_autre:
+                    st.markdown("**Autre**")
+                    cat = "Autre"
+                else:
+                    cat = st.text_input("cat", inv["categorie"], key=f"inv_c_libre_{j}", label_visibility="collapsed",
+                                        placeholder="Intitule libre")
+            with c2:
+                mont = st.number_input("mt", 0, 20_000_000, inv["montant"], step=50_000, key=f"inv_m_libre_{j}", label_visibility="collapsed")
+            with c3:
+                st.markdown("*-*")
+            with c4:
+                dur = st.number_input("dur", 0, 30, inv["duree_amort"], key=f"inv_d_libre_{j}", label_visibility="collapsed")
+            with c5:
+                amort_an = mont / dur if dur > 0 else 0
+                st.markdown(f'<div style="text-align:center"><b>{amort_an:,.0f} \u20ac</b></div>' if dur > 0 else '<div style="text-align:center"><i>Non amorti</i></div>', unsafe_allow_html=True)
             new_inv.append({"categorie": cat, "montant": mont, "duree_amort": dur})
+
         p["investissements"] = new_inv
+        p["investissements_supplementaires"] = inv_supp_new
 
         total_inv = sum(i["montant"] for i in p["investissements"])
         st.info(f"**Investissement total : {total_inv:,.0f} \u20ac**")
@@ -1602,13 +1794,12 @@ def tab_hypotheses(p):
         st.caption("Pourcentage annuel de l'investissement initial (amenagements + mobilier) "
                    "reinvesti pour maintenir et renouveler les equipements.")
 
-        # Categories concernees par le reinvestissement
-        reinvest_cats = p.get("reinvest_categories", ["Amenagements interieurs", "Mobilier & Equipements"])
+        # Base de reinvestissement = tous les investissements amortissables
         montant_reinvest_base = sum(
             inv["montant"] for inv in p["investissements"]
-            if inv["categorie"] in reinvest_cats
+            if inv.get("montant", 0) > 0 and inv.get("duree_amort", 0) > 0
         )
-        st.caption(f"Base de reinvestissement (categories : {', '.join(reinvest_cats)}) : **{montant_reinvest_base:,.0f} \u20ac**")
+        st.caption(f"Base de reinvestissement (tous investissements amortissables) : **{montant_reinvest_base:,.0f} \u20ac**")
 
         pct_list = p.get("reinvest_pct_an", [0.0, 0.005, 0.01, 0.015, 0.02, 0.02, 0.025, 0.025, 0.025, 0.025])
         # S'assurer qu'on a au moins 10 valeurs
@@ -2203,30 +2394,6 @@ def tab_indicateurs(df, indic, params):
             })
         st.dataframe(df_table, use_container_width=True, hide_index=True,
                       height=min(600, 35 * len(df_table) + 38))
-        # Chart
-        st.markdown('<div class="section-header">Vue d\'ensemble</div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        if periode == "Annuel":
-            fig.add_trace(go.Bar(x=x_labels_an, y=indic["CA Total"], name="CA Total", marker_color="#4facfe"))
-            fig.add_trace(go.Scatter(x=x_labels_an, y=indic["EBITDA"], name="EBITDA",
-                                      mode="lines+markers", line=dict(color="#11998e", width=3)))
-            fig.add_trace(go.Scatter(x=x_labels_an, y=indic["Resultat Net"], name="Resultat Net",
-                                      mode="lines+markers", line=dict(color="#f5576c", width=3)))
-            fig.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.5)
-            fig.update_layout(height=450, xaxis=dict(type="category", tickfont=dict(size=12)),
-                              yaxis_tickformat=",", legend=dict(orientation="h", y=-0.12))
-            _scrollable_chart(fig, n_annees, _PX_PAR_BARRE, 450)
-        else:
-            df_src2 = _filter_monthly(df)
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["ca_total"], name="CA Total", marker_color="#4facfe"))
-            fig.add_trace(go.Scatter(x=df_src2["date"], y=df_src2["ebitda"], name="EBITDA",
-                                      mode="lines", line=dict(color="#11998e", width=2)))
-            fig.add_trace(go.Scatter(x=df_src2["date"], y=df_src2["resultat_net"], name="Resultat Net",
-                                      mode="lines", line=dict(color="#f5576c", width=2)))
-            fig.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.5)
-            fig.update_layout(height=450, yaxis_tickformat=",", xaxis=_tick_cfg(),
-                              legend=dict(orientation="h", y=-0.18))
-            _scrollable_chart(fig, len(df_src2), _px_pt(), 450)
 
     # ── Hebergement ───────────────────────────────────────────────────────
     elif categorie == "Hebergement":
@@ -2258,56 +2425,6 @@ def tab_indicateurs(df, indic, params):
             })
         st.dataframe(df_table, use_container_width=True, hide_index=True,
                       height=min(600, 35 * len(df_table) + 38))
-        # Chart
-        st.markdown('<div class="section-header">Hebergement</div>', unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        if periode == "Annuel":
-            with col1:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=x_labels_an, y=indic["Taux Occupation"],
-                                          mode="lines+markers", name="Taux Occup. (%)", line=dict(color="#764ba2", width=3)))
-                fig.update_layout(title=dict(text="Taux d'occupation (%)", font=dict(size=13)),
-                                  height=400, xaxis=dict(type="category", tickfont=dict(size=12)),
-                                  yaxis=dict(title="%", range=[0, 100]))
-                _scrollable_chart(fig, n_annees, _PX_PAR_BARRE, 400)
-            with col2:
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
-                fig.add_trace(go.Bar(x=x_labels_an, y=indic["Prix Moyen (ADR)"],
-                                     name="ADR", marker_color="#667eea", opacity=0.7), secondary_y=False)
-                fig.add_trace(go.Scatter(x=x_labels_an, y=indic["RevPAR"],
-                                          name="RevPAR", mode="lines+markers", line=dict(color="#f5576c", width=3)),
-                              secondary_y=True)
-                fig.update_layout(title=dict(text="ADR & RevPAR", font=dict(size=13)),
-                                  height=400, xaxis=dict(type="category", tickfont=dict(size=12)),
-                                  legend=dict(orientation="h", y=-0.15))
-                fig.update_yaxes(title_text="ADR (\u20ac)", secondary_y=False)
-                fig.update_yaxes(title_text="RevPAR (\u20ac)", secondary_y=True)
-                _scrollable_chart(fig, n_annees, _PX_PAR_BARRE, 400)
-        else:
-            df_src2 = _filter_monthly(df)
-            with col1:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=df_src2["date"], y=df_src2["taux_occupation"] * 100,
-                                          mode="lines", name="Taux Occup. (%)", line=dict(color="#764ba2", width=2)))
-                fig.update_layout(title=dict(text="Taux d'occupation mensuel (%)", font=dict(size=13)),
-                                  height=400, yaxis=dict(title="%", range=[0, 100]), xaxis=_tick_cfg())
-                _scrollable_chart(fig, len(df_src2), _px_pt(), 400)
-            with col2:
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
-                fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["prix_moyen"],
-                                     name="ADR", marker_color="#667eea", opacity=0.7), secondary_y=False)
-                nb_ch = params["nb_chambres"]
-                revpar_m = [row["ca_hebergement"] / (nb_ch * jours_dans_mois(row["date"])) if nb_ch > 0 else 0
-                            for _, row in df_src2.iterrows()]
-                fig.add_trace(go.Scatter(x=df_src2["date"], y=revpar_m,
-                                          name="RevPAR", mode="lines", line=dict(color="#f5576c", width=2)),
-                              secondary_y=True)
-                fig.update_layout(title=dict(text="ADR & RevPAR (mensuel)", font=dict(size=13)),
-                                  height=400, xaxis=_tick_cfg(),
-                                  legend=dict(orientation="h", y=-0.18))
-                fig.update_yaxes(title_text="ADR (\u20ac)", secondary_y=False)
-                fig.update_yaxes(title_text="RevPAR (\u20ac)", secondary_y=True)
-                _scrollable_chart(fig, len(df_src2), _px_pt(), 400)
 
     # ── Brasserie ─────────────────────────────────────────────────────────
     elif categorie == "Brasserie":
@@ -2328,23 +2445,6 @@ def tab_indicateurs(df, indic, params):
             })
         st.dataframe(df_table, use_container_width=True, hide_index=True,
                       height=min(600, 35 * len(df_table) + 38))
-        st.markdown('<div class="section-header">Brasserie</div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        if periode == "Annuel":
-            agg2 = df.groupby("annee").agg({"ca_brasserie": "sum", "ca_pdj": "sum"}).reset_index()
-            x_lab2 = [str(int(a)) for a in agg2["annee"]]
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["ca_brasserie"], name="CA Brasserie", marker_color="#f5576c"))
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["ca_pdj"], name="CA PDJ", marker_color="#38ef7d"))
-            fig.update_layout(height=450, barmode="group", xaxis=dict(type="category", tickfont=dict(size=12)),
-                              yaxis_tickformat=",", legend=dict(orientation="h", y=-0.12))
-            _scrollable_chart(fig, len(agg2), _PX_PAR_BARRE, 450)
-        else:
-            df_src2 = _filter_monthly(df)
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["ca_brasserie"], name="CA Brasserie", marker_color="#f5576c"))
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["ca_pdj"], name="CA PDJ", marker_color="#38ef7d"))
-            fig.update_layout(height=450, barmode="group", yaxis_tickformat=",",
-                              xaxis=_tick_cfg(), legend=dict(orientation="h", y=-0.18))
-            _scrollable_chart(fig, len(df_src2), _px_pt(), 450)
 
     # ── Bar ───────────────────────────────────────────────────────────────
     elif categorie == "Bar":
@@ -2363,21 +2463,6 @@ def tab_indicateurs(df, indic, params):
             })
         st.dataframe(df_table, use_container_width=True, hide_index=True,
                       height=min(600, 35 * len(df_table) + 38))
-        st.markdown('<div class="section-header">Bar</div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        if periode == "Annuel":
-            agg2 = df.groupby("annee").agg({"ca_bar": "sum"}).reset_index()
-            x_lab2 = [str(int(a)) for a in agg2["annee"]]
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["ca_bar"], name="CA Bar", marker_color="#ffcc00"))
-            fig.update_layout(height=450, xaxis=dict(type="category", tickfont=dict(size=12)),
-                              yaxis_tickformat=",", legend=dict(orientation="h", y=-0.12))
-            _scrollable_chart(fig, len(agg2), _PX_PAR_BARRE, 450)
-        else:
-            df_src2 = _filter_monthly(df)
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["ca_bar"], name="CA Bar", marker_color="#ffcc00"))
-            fig.update_layout(height=450, yaxis_tickformat=",",
-                              xaxis=_tick_cfg(), legend=dict(orientation="h", y=-0.18))
-            _scrollable_chart(fig, len(df_src2), _px_pt(), 450)
 
     # ── Spa ───────────────────────────────────────────────────────────────
     elif categorie == "Spa":
@@ -2396,34 +2481,20 @@ def tab_indicateurs(df, indic, params):
             })
         st.dataframe(df_table, use_container_width=True, hide_index=True,
                       height=min(600, 35 * len(df_table) + 38))
-        st.markdown('<div class="section-header">Spa</div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        if periode == "Annuel":
-            agg2 = df.groupby("annee").agg({"ca_spa": "sum"}).reset_index()
-            x_lab2 = [str(int(a)) for a in agg2["annee"]]
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["ca_spa"], name="CA Spa", marker_color="#11998e"))
-            fig.update_layout(height=450, xaxis=dict(type="category", tickfont=dict(size=12)),
-                              yaxis_tickformat=",", legend=dict(orientation="h", y=-0.12))
-            _scrollable_chart(fig, len(agg2), _PX_PAR_BARRE, 450)
-        else:
-            df_src2 = _filter_monthly(df)
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["ca_spa"], name="CA Spa", marker_color="#11998e"))
-            fig.update_layout(height=450, yaxis_tickformat=",",
-                              xaxis=_tick_cfg(), legend=dict(orientation="h", y=-0.18))
-            _scrollable_chart(fig, len(df_src2), _px_pt(), 450)
 
     # ── Salles/Evenements ─────────────────────────────────────────────────
     elif categorie == "Salles/Evenements":
         if periode == "Annuel":
             agg = df.groupby("annee").agg({
-                "ca_seminaires": "sum", "ca_mariages": "sum", "ca_salles": "sum",
+                "ca_seminaires": "sum", "ca_mariages": "sum", "ca_commission_catering": "sum", "ca_salles": "sum",
             }).reset_index()
             x_lab = [str(int(a)) for a in agg["annee"]]
             df_table = pd.DataFrame({
                 "Annee": x_lab,
                 "CA Seminaires": [f"{v:,.0f} \u20ac" for v in agg["ca_seminaires"]],
                 "CA Mariages": [f"{v:,.0f} \u20ac" for v in agg["ca_mariages"]],
-                "CA Salles": [f"{v:,.0f} \u20ac" for v in agg["ca_salles"]],
+                "Commission Catering": [f"{v:,.0f} \u20ac" for v in agg["ca_commission_catering"]],
+                "CA Salles Total": [f"{v:,.0f} \u20ac" for v in agg["ca_salles"]],
             })
         else:
             df_src = _filter_monthly(df)
@@ -2431,31 +2502,11 @@ def tab_indicateurs(df, indic, params):
                 "Mois": [d.strftime("%b %Y") for d in df_src["date"]],
                 "CA Seminaires": [f"{v:,.0f} \u20ac" for v in df_src["ca_seminaires"]],
                 "CA Mariages": [f"{v:,.0f} \u20ac" for v in df_src["ca_mariages"]],
-                "CA Salles": [f"{v:,.0f} \u20ac" for v in df_src["ca_salles"]],
+                "Commission Catering": [f"{v:,.0f} \u20ac" for v in df_src["ca_commission_catering"]],
+                "CA Salles Total": [f"{v:,.0f} \u20ac" for v in df_src["ca_salles"]],
             })
         st.dataframe(df_table, use_container_width=True, hide_index=True,
                       height=min(600, 35 * len(df_table) + 38))
-        st.markdown('<div class="section-header">Salles / Evenements</div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        if periode == "Annuel":
-            agg2 = df.groupby("annee").agg({
-                "ca_seminaires": "sum", "ca_mariages": "sum", "ca_salles": "sum",
-            }).reset_index()
-            x_lab2 = [str(int(a)) for a in agg2["annee"]]
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["ca_seminaires"], name="Seminaires", marker_color="#667eea"))
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["ca_mariages"], name="Mariages", marker_color="#f093fb"))
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["ca_salles"], name="Salles", marker_color="#38ef7d"))
-            fig.update_layout(height=450, barmode="group", xaxis=dict(type="category", tickfont=dict(size=12)),
-                              yaxis_tickformat=",", legend=dict(orientation="h", y=-0.12))
-            _scrollable_chart(fig, len(agg2), _PX_PAR_BARRE, 450)
-        else:
-            df_src2 = _filter_monthly(df)
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["ca_seminaires"], name="Seminaires", marker_color="#667eea"))
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["ca_mariages"], name="Mariages", marker_color="#f093fb"))
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["ca_salles"], name="Salles", marker_color="#38ef7d"))
-            fig.update_layout(height=450, barmode="group", yaxis_tickformat=",",
-                              xaxis=_tick_cfg(), legend=dict(orientation="h", y=-0.18))
-            _scrollable_chart(fig, len(df_src2), _px_pt(), 450)
 
     # ── Charges ───────────────────────────────────────────────────────────
     elif categorie == "Charges":
@@ -2488,24 +2539,6 @@ def tab_indicateurs(df, indic, params):
                 df_table[c] = [f"{v:,.0f} \u20ac" for v in df_src[c]]
         st.dataframe(df_table, use_container_width=True, hide_index=True,
                       height=min(600, 35 * len(df_table) + 38))
-        # Stacked bar CV vs CF
-        st.markdown('<div class="section-header">Charges Variables vs Fixes</div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        if periode == "Annuel":
-            agg2 = df.groupby("annee").agg({"cv_total": "sum", "cf_total": "sum"}).reset_index()
-            x_lab2 = [str(int(a)) for a in agg2["annee"]]
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["cv_total"], name="Charges Variables", marker_color="#f5576c"))
-            fig.add_trace(go.Bar(x=x_lab2, y=agg2["cf_total"], name="Charges Fixes", marker_color="#667eea"))
-            fig.update_layout(height=450, barmode="stack", xaxis=dict(type="category", tickfont=dict(size=12)),
-                              yaxis_tickformat=",", legend=dict(orientation="h", y=-0.12))
-            _scrollable_chart(fig, len(agg2), _PX_PAR_BARRE, 450)
-        else:
-            df_src2 = _filter_monthly(df)
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["cv_total"], name="Charges Variables", marker_color="#f5576c"))
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["cf_total"], name="Charges Fixes", marker_color="#667eea"))
-            fig.update_layout(height=450, barmode="stack", yaxis_tickformat=",",
-                              xaxis=_tick_cfg(), legend=dict(orientation="h", y=-0.18))
-            _scrollable_chart(fig, len(df_src2), _px_pt(), 450)
 
     # ── Cash Flow & Dette ─────────────────────────────────────────────────
     elif categorie == "Cash Flow & Dette":
@@ -2532,68 +2565,7 @@ def tab_indicateurs(df, indic, params):
                     df_table[c] = df_table[c].apply(lambda v: f"{v:,.0f} \u20ac")
         st.dataframe(df_table, use_container_width=True, hide_index=True,
                       height=min(600, 35 * len(df_table) + 38))
-        st.markdown('<div class="section-header">Cash Flow et service de la dette</div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        if periode == "Annuel":
-            fig.add_trace(go.Bar(x=x_labels_an, y=indic["Cash Flow"], name="Cash Flow", marker_color="#4facfe"))
-            fig.add_trace(go.Scatter(x=x_labels_an, y=indic["Cash Flow Cumul"], name="Cash Flow Cumule",
-                                      mode="lines+markers", line=dict(color="#667eea", width=3)))
-            fig.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.5)
-            fig.update_layout(height=450, xaxis=dict(type="category", tickfont=dict(size=12)),
-                              yaxis_tickformat=",", legend=dict(orientation="h", y=-0.12))
-            _scrollable_chart(fig, n_annees, _PX_PAR_BARRE, 450)
-        else:
-            df_src2 = _filter_monthly(df)
-            fig.add_trace(go.Bar(x=df_src2["date"], y=df_src2["cash_flow"], name="Cash Flow", marker_color="#4facfe"))
-            fig.add_trace(go.Scatter(x=df_src2["date"], y=df_src2["cash_flow_cumul"], name="Cash Flow Cumule",
-                                      mode="lines", line=dict(color="#667eea", width=2)))
-            fig.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.5)
-            fig.update_layout(height=450, yaxis_tickformat=",",
-                              xaxis=_tick_cfg(), legend=dict(orientation="h", y=-0.18))
-            _scrollable_chart(fig, len(df_src2), _px_pt(), 450)
 
-    # ── Waterfall & Pie charts (toujours affiches) ────────────────────────
-    st.markdown("---")
-    st.markdown('<div class="section-header">Analyse structurelle — Annee de croisiere</div>', unsafe_allow_html=True)
-
-    annees_cal_all = sorted(indic["Annee calendaire"].unique())
-    idx_ref = min(3, len(annees_cal_all) - 1)
-    an_cal_ref = int(annees_cal_all[idx_ref])
-    row = indic[indic["Annee calendaire"] == an_cal_ref].iloc[0]
-
-    fig = go.Figure(go.Waterfall(
-        name="Compte de resultat",
-        orientation="v",
-        measure=["absolute", "relative", "relative", "total", "relative", "total", "relative", "relative", "total"],
-        x=["CA Total", "Charges Var.", "Charges Fixes", "EBITDA", "Amortissement", "EBIT", "Interets", "Impot*", "Resultat Net"],
-        y=[row["CA Total"], -row["Charges Variables"], -row["Charges Fixes"], 0,
-           -row["Amortissement"], 0, -row["Interets"],
-           -(row["EBIT"] - row["Interets"] - row["Resultat Net"]), 0],
-        connector={"line": {"color": "#888"}},
-        increasing={"marker": {"color": "#38ef7d"}},
-        decreasing={"marker": {"color": "#f5576c"}},
-        totals={"marker": {"color": "#667eea"}},
-        textfont=dict(size=13),
-    ))
-    fig.update_layout(title=f"Waterfall - {an_cal_ref}", height=450, yaxis_tickformat=",")
-    st.plotly_chart(fig, use_container_width=True)
-
-    col1, col2 = st.columns(2)
-    with col1:
-        labels = ["Personnel", "Charges fixes autres", "Charges variables"]
-        values = [row["Charges Fixes"] * 0.7, row["Charges Fixes"] * 0.3, row["Charges Variables"]]
-        fig = px.pie(names=labels, values=values, title="Structure des couts (croisiere)",
-                     color_discrete_sequence=["#667eea", "#764ba2", "#f5576c"])
-        fig.update_layout(height=380)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        inv_labels = [i["categorie"] for i in params["investissements"]]
-        inv_values = [i["montant"] for i in params["investissements"]]
-        fig = px.pie(names=inv_labels, values=inv_values, title="Repartition investissements",
-                     color_discrete_sequence=px.colors.qualitative.Set3)
-        fig.update_layout(height=380)
-        st.plotly_chart(fig, use_container_width=True)
 
 
 # ─── Onglet Prets ──────────────────────────────────────────────────────────────
@@ -5533,6 +5505,14 @@ def _module_rocher():
 
 # ─── Rapport complet ──────────────────────────────────────────────────────────
 
+def _text_area_height(text, min_h=80, max_h=400, chars_per_line=90, line_h=22):
+    """Calcule la hauteur d'un text_area en fonction de la longueur du texte."""
+    if not text:
+        return min_h
+    nb_lines = sum(1 + len(line) // chars_per_line for line in text.split("\n"))
+    return max(min_h, min(max_h, nb_lines * line_h + 40))
+
+
 def _comment_slot(p, plan_nom, slot_id, print_mode=False):
     """Affiche un emplacement de commentaire dans le rapport.
     - Edit mode : bouton + pour ajouter, text_area pour editer, bouton supprimer
@@ -5565,7 +5545,7 @@ def _comment_slot(p, plan_nom, slot_id, print_mode=False):
     # Edit mode
     if has_comment or st.session_state.get(editing_key):
         _val = comments.get(slot_id, "")
-        _new = st.text_area("Commentaire", value=_val, height=80,
+        _new = st.text_area("Commentaire", value=_val, height=_text_area_height(_val),
                             key=f"ta_cmt_{slot_id}", label_visibility="collapsed")
         _c1, _c2, _ = st.columns([1, 1, 4])
         with _c1:
@@ -5969,7 +5949,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             _new_comment_ro = st.text_area(
                 "Commentaire de synthese (editable)",
                 value=_default_comment_ro,
-                height=120,
+                height=_text_area_height(_default_comment_ro, min_h=120),
                 key="ta_comment_rocher",
             )
             if _new_comment_ro != p.get(_comment_key_ro):
@@ -6132,7 +6112,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             _new_comment_ch = st.text_area(
                 "Commentaire de synthese (editable)",
                 value=_default_comment_ch,
-                height=140,
+                height=_text_area_height(_default_comment_ch, min_h=120),
                 key="ta_comment_chateau",
             )
             if _new_comment_ch != p.get(_comment_key_ch):

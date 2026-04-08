@@ -138,6 +138,8 @@ def params_defaut():
         "mariage_nb_convives_moy": 120,
         "mariage_prix_convive": 95,
         "mariage_prix_location": 2500,
+        "mariage_catering_prix_convive": 95,
+        "mariage_commission_catering_pct": 0.10,
 
         # Divers (minibar, blanchisserie, extras)
         "divers_prix_nuitee": 3,             # EUR/nuitee vendue
@@ -155,7 +157,10 @@ def params_defaut():
             "Fournitures chambres": 2.5,
         },
         "cv_commission_ota_pct": 0.17,       # % du CA hebergement pondere par part OTA
-        "cv_franchise_pct": 0.04,            # % du CA (hors loyer restaurant et spa)
+        "cv_franchise_pct": 0.04,            # % du CA hebergement
+        "cv_franchise_par_nuitee": 0.0,      # EUR/nuitee
+        "cv_franchise_forfait_mois": 0.0,    # EUR/mois
+        "cv_franchise_modes": ["pct"],       # modes actifs: pct, nuitee, forfait
 
         # Compatibilite ancienne structure
         "cv_hebergement": {
@@ -168,9 +173,11 @@ def params_defaut():
         },
 
         "cv_brasserie_pct": 0.35,            # food cost brasserie = pdj
+        "cv_eau_brasserie_par_client": 0.0,   # EUR/couvert (eau)
         "cv_bar_beverage_pct": 0.30,          # beverage cost
         "cv_bar_consommable_unite": 0.20,     # EUR/consommation
         "cv_bar_pct": 0.25,                   # compat
+        "cv_eau_bar_par_client": 0.0,         # EUR/client (eau)
 
         "cv_spa_soin_cout": 50,               # EUR/soin
         "cv_spa_produits_soin": 5,            # EUR/soin
@@ -285,11 +292,11 @@ def params_defaut():
 
         # ── Investissements & Financement ─────────────────────────────────
         "investissements": [
-            {"categorie": "Terrain", "montant": 2951000, "duree_amort": 0},
-            {"categorie": "Construction", "montant": 14871850, "duree_amort": 0},
             {"categorie": "Amenagements interieurs", "montant": 1534444, "duree_amort": 10},
             {"categorie": "Mobilier & Equipements", "montant": 2347485, "duree_amort": 5},
-            {"categorie": "Branding", "montant": 200000, "duree_amort": 3},
+            {"categorie": "Branding/Communication", "montant": 200000, "duree_amort": 3},
+            {"categorie": "", "montant": 0, "duree_amort": 0},
+            {"categorie": "Autre", "montant": 0, "duree_amort": 0},
         ],
         "reinvest_pct_an": [0.0, 0.005, 0.01, 0.015, 0.02, 0.02, 0.025],
         "reinvest_categories": ["Amenagements interieurs", "Mobilier & Equipements"],
@@ -490,9 +497,17 @@ def calc_revenus_mensuels(params, d: date, annee_idx: int):
         ca_seminaires = params.get("seminaire_prix_location", 800) * params["seminaire_nb_an"] / 12 * infl_ventes
         ca_salles += ca_seminaires
     # Mariages : location_salle x nb_mariages / 12
+    ca_commission_catering = 0
     if "mariage_nb_an" in params and params["mariage_nb_an"] > 0:
         ca_mariages = params.get("mariage_prix_location", 2500) * params["mariage_nb_an"] / 12 * infl_ventes
         ca_salles += ca_mariages
+        # Commission sur catering : nb_mariages x nb_convives x prix_convive x %commission / 12
+        nb_convives = params.get("mariage_nb_convives_moy", 120)
+        prix_catering = params.get("mariage_catering_prix_convive", 95)
+        pct_commission = params.get("mariage_commission_catering_pct", 0.10)
+        ca_commission_catering = (params["mariage_nb_an"] * nb_convives *
+                                  prix_catering * pct_commission / 12 * infl_ventes)
+        ca_salles += ca_commission_catering
     # Location salles du chateau
     ca_salles_chateau = 0
     if params.get("salles_chateau_nb_an", 0) > 0:
@@ -532,6 +547,7 @@ def calc_revenus_mensuels(params, d: date, annee_idx: int):
         "ca_salles": ca_salles,
         "ca_seminaires": ca_seminaires,
         "ca_mariages": ca_mariages,
+        "ca_commission_catering": ca_commission_catering,
         "ca_salles_chateau": ca_salles_chateau,
         "ca_divers": ca_divers,
         "ca_loyer_restaurant": ca_loyer_restaurant,
@@ -575,9 +591,15 @@ def calc_charges_variables(params, rev: dict, annee_idx: int):
         # Commission cartes de credit : cout/nuitee * % chambres payees par CB * nuitees
         cv_commission_cb = (params.get("cv_commission_cb_nuitee", 1.5) *
                             params.get("cv_commission_cb_pct_chambres", 0.80) * nuitees * infl_cv)
-        # Franchise : % du CA total hebergement
-        ca_base_franchise = rev["ca_hebergement"]
-        cv_franchise = ca_base_franchise * params.get("cv_franchise_pct", 0.04)
+        # Franchise : cumul des modalites actives (pct, nuitee, forfait)
+        _franchise_modes = params.get("cv_franchise_modes", ["pct"])
+        cv_franchise = 0
+        if "pct" in _franchise_modes:
+            cv_franchise += rev["ca_hebergement"] * params.get("cv_franchise_pct", 0.04)
+        if "nuitee" in _franchise_modes:
+            cv_franchise += nuitees * params.get("cv_franchise_par_nuitee", 0) * infl_cv
+        if "forfait" in _franchise_modes:
+            cv_franchise += params.get("cv_franchise_forfait_mois", 0) * infl_cv
         cv_heberg_autre = (cout_par_nuitee * nuitees * infl_cv + cv_commission_cb + cv_franchise)
     else:
         # Fallback ancien format
@@ -592,14 +614,39 @@ def calc_charges_variables(params, rev: dict, annee_idx: int):
     # Midi & soir : food cost % CA + PDJ : food cost PDJ % CA PDJ
     cv_brasserie_resto = rev.get("_ca_brass_ext", 0) * params["cv_brasserie_pct"]
     cv_pdj = rev.get("_ca_pdj_infl", 0) * params.get("cv_pdj_pct", params["cv_brasserie_pct"])
-    cv_brasserie = cv_brasserie_resto + cv_pdj
+    # Eau brasserie : cout/client * nb couverts mensuels
+    _d = rev["date"]
+    _jours = calendar.monthrange(_d.year, _d.month)[1]
+    _pers_ch = params.get("personnes_par_chambre", 2.0)
+    _mois_idx = (_d.month - 1)  # 0-11 pour saisonnalite
+    _taux_brass = calc_taux_occupation_brasserie(params, annee_idx, _mois_idx)
+    _nb_couv = params.get("nb_couverts_brasserie", 80)
+    if "brasserie_prix_souper" in params:
+        _couverts_ext = (_taux_brass *
+                         (params["brasserie_jours_souper"] / 7 * params["brasserie_services_souper"] +
+                          params["brasserie_jours_diner"] / 7 * params["brasserie_services_diner"]) *
+                         _jours * _nb_couv)
+    else:
+        _couverts_ext = ((params.get("brasserie_couverts_soir", 50) * params.get("brasserie_ouvert_soir", 4) / 7 +
+                          params.get("brasserie_couverts_midi", 40) * params.get("brasserie_ouvert_midi", 4) / 7 * 1.5) * _jours)
+    _couverts_pdj = nuitees * params.get("petit_dej_taux", 0.85) * _pers_ch
+    _nb_clients_brass = _couverts_ext + _couverts_pdj
+    cv_eau_brasserie = params.get("cv_eau_brasserie_par_client", 0) * _nb_clients_brass * infl_cv
+    cv_brasserie = cv_brasserie_resto + cv_pdj + cv_eau_brasserie
 
     # ── Bar CV (Row 41) ──
     # = ca_bar * beverage_cost + nb_conso * consommable
     bar_prix = params.get("bar_prix_moyen", params.get("bar_conso_moyenne", 18))
     nb_conso = rev["ca_bar"] / bar_prix if bar_prix > 0 else 0
+    # Eau bar : cout/client * nb clients mensuels
+    _nb_clients_bar_hotel = params.get("bar_taux_clients_hotel", 0.4) * nuitees * _pers_ch
+    _jours_ouvert_bar = _jours * params.get("bar_jours_ouvert_semaine", 7) / 7
+    _nb_clients_bar_ext = params.get("bar_clients_ext_jour", 0) * _jours_ouvert_bar
+    _nb_clients_bar = _nb_clients_bar_hotel + _nb_clients_bar_ext
+    cv_eau_bar = params.get("cv_eau_bar_par_client", 0) * _nb_clients_bar * infl_cv
     cv_bar = (rev["ca_bar"] * params.get("cv_bar_pct", 0.25) +
-              nb_conso * params.get("cv_bar_consommable_unite", 0.20) * infl_cv)
+              nb_conso * params.get("cv_bar_consommable_unite", 0.20) * infl_cv +
+              cv_eau_bar)
 
     # ── Spa CV (Row 46) ──
     nb_soins_hotel = rev["nuitees"] * params.get("spa_soin_hotel_taux", 0.10)
@@ -799,9 +846,10 @@ def calc_charges_fixes_mensuelles(params, d: date, annee_idx: int):
     # Autres frais fixes directs (hors personnel, pas de loyer ici - loyer dans CF indirects)
     cf_autres_heberg = sum(params.get("cf_directs_hebergement", {}).values()) / 12 * infl_autres_cumul
     cf_autres_brass = sum(params.get("cf_directs_brasserie", {}).values()) / 12 * infl_autres_cumul
+    cf_autres_bar = sum(params.get("cf_directs_bar", {}).values()) / 12 * infl_autres_cumul
     cf_autres_spa = sum(params.get("cf_directs_spa", {}).values()) / 12 * infl_autres_cumul
     cf_autres_events = sum(params.get("cf_directs_evenements", {}).values()) / 12 * infl_autres_cumul
-    cf_autres_directs = cf_autres_heberg + cf_autres_brass + cf_autres_spa + cf_autres_events
+    cf_autres_directs = cf_autres_heberg + cf_autres_brass + cf_autres_bar + cf_autres_spa + cf_autres_events
 
     # Total charges fixes directes = personnel direct + autres (pas de loyer)
     cf_directs_total = cf_personnel_direct + cf_autres_directs
@@ -826,7 +874,7 @@ def calc_charges_fixes_mensuelles(params, d: date, annee_idx: int):
         for k, v in cf_indirect_dict.items():
             montant = v[year_idx] if isinstance(v, list) else v
             # Precompte immobilier : vérifier si l'année est active
-            if k == "Precompte immobilier" and precompte_annees_actives is not None:
+            if k in ("Precompte immobilier", "Taxe fonciere") and precompte_annees_actives is not None:
                 if (annee_idx + 1) not in precompte_annees_actives:
                     montant = 0
             cf_indirectes_an += montant
@@ -835,7 +883,7 @@ def calc_charges_fixes_mensuelles(params, d: date, annee_idx: int):
         for k, v in params.get("charges_fixes_indirectes",
                                 params.get("charges_fixes_autres", {})).items():
             montant = v
-            if k == "Precompte immobilier" and precompte_annees_actives is not None:
+            if k in ("Precompte immobilier", "Taxe fonciere") and precompte_annees_actives is not None:
                 if (annee_idx + 1) not in precompte_annees_actives:
                     montant = 0
             cf_indirectes_an += montant
@@ -863,7 +911,7 @@ def calc_charges_fixes_mensuelles(params, d: date, annee_idx: int):
                 if p_name in _cfi_dict:
                     v = _cfi_dict[p_name]
                     m = v[_yr] if isinstance(v, list) else v
-                    if p_name == "Precompte immobilier" and precompte_annees_actives is not None:
+                    if p_name in ("Precompte immobilier", "Taxe fonciere") and precompte_annees_actives is not None:
                         if (annee_idx + 1) not in precompte_annees_actives:
                             m = 0
                     tot += m
@@ -909,7 +957,8 @@ def calc_charges_fixes_mensuelles(params, d: date, annee_idx: int):
         # CF directs par service (personnel + autres)
         "cf_directs_hebergement": cf_pers_heberg_pl + cf_autres_heberg,
         "cf_directs_brasserie": cf_pers_brass_pl + cf_autres_brass,
-        "cf_directs_bar": cf_pers_bar_pl,
+        "cf_directs_bar": cf_pers_bar_pl + cf_autres_bar,
+        "cf_autres_bar": cf_autres_bar,
         "cf_directs_spa": cf_pers_spa_pl + cf_autres_spa,
         "cf_directs_evenements": cf_pers_events_pl + cf_autres_events,
         # Detail CF indirectes par nature
@@ -939,11 +988,10 @@ def calc_amortissements_mensuels(params, d: date, date_ouverture: date):
     mois_depuis_ouverture = (d.year - date_ouverture.year) * 12 + (d.month - date_ouverture.month)
     annee_idx = mois_depuis_ouverture // 12
 
-    # Montants de base pour reinvest par categorie (avec leur duree d'amortissement)
-    reinvest_cats = params.get("reinvest_categories", ["Amenagements interieurs", "Mobilier & Equipements"])
+    # Montants de base pour reinvest : tous les investissements amortissables
     reinvest_bases = []  # [(montant, duree_amort), ...]
     for inv in params["investissements"]:
-        if inv["categorie"] in reinvest_cats and inv["duree_amort"] > 0:
+        if inv.get("montant", 0) > 0 and inv.get("duree_amort", 0) > 0:
             reinvest_bases.append((inv["montant"], inv["duree_amort"]))
 
     reinvest_amort = 0
@@ -1376,6 +1424,7 @@ def projection_complete(params):
             "ca_salles": rev.get("ca_salles", 0),
             "ca_seminaires": rev["ca_seminaires"],
             "ca_mariages": rev["ca_mariages"],
+            "ca_commission_catering": rev.get("ca_commission_catering", 0),
             "ca_salles_chateau": rev.get("ca_salles_chateau", 0),
             "ca_divers": rev.get("ca_divers", 0),
             "ca_loyer_restaurant": rev.get("ca_loyer_restaurant", 0),

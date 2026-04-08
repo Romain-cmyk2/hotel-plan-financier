@@ -118,7 +118,9 @@
   "mariage_nb_an": 20,
   "mariage_nb_convives_moy": 120,
   "mariage_prix_convive": 95,
-  "mariage_prix_location": 5000,
+  "mariage_prix_location": 4500,
+  "mariage_catering_prix_convive": 80,
+  "mariage_commission_catering_pct": 0.1,
   "divers_prix_nuitee": 3.0,
   "divers_taux": 1.0,
   "loyer_restaurant_mensuel": 5860,
@@ -130,7 +132,7 @@
     "Fournitures chambres": 2.5
   },
   "cv_commission_ota_pct": 0.17,
-  "cv_franchise_pct": 0.04,
+  "cv_franchise_pct": 0.0,
   "cv_hebergement": {
     "Blanchisserie": 8.5,
     "Produits accueil": 3.5,
@@ -140,9 +142,11 @@
     "Divers": 5.0
   },
   "cv_brasserie_pct": 0.35,
+  "cv_eau_brasserie_par_client": 0.0,
   "cv_bar_beverage_pct": 0.3,
   "cv_bar_consommable_unite": 0.2,
   "cv_bar_pct": 0.25,
+  "cv_eau_bar_par_client": 0.0,
   "cv_spa_soin_cout": 50.0,
   "cv_spa_produits_soin": 5.0,
   "cv_spa_consommable_entree": 1.5,
@@ -158,7 +162,7 @@
   "cv_mariage_energie": 150.0,
   "cv_mariage_nettoyage": 1000.0,
   "cv_mariage_pct": 0.35,
-  "cv_divers_consommable": 1.0,
+  "cv_divers_consommable": 3.0,
   "charges_patronales_pct": 0.35,
   "personnel_hebergement": [
     {
@@ -197,7 +201,7 @@
   "personnel_bar": [
     {
       "poste": "Barman",
-      "etp": 1,
+      "etp": 1.0,
       "cout_brut": 37500
     }
   ],
@@ -259,16 +263,15 @@
     "Amenities & minibar": 8000
   },
   "cf_directs_brasserie": {
-    "Location materiel cuisine": 12000,
-    "Uniformes / EPI": 4000
+    "Electricite": 20000
+  },
+  "cf_directs_bar": {
+    "Electricite": 0
   },
   "cf_directs_spa": {
-    "Entretien equipements spa": 8000,
-    "Produits soins (stock fixe)": 6000
+    "Entretien equipements spa": 8000
   },
-  "cf_directs_evenements": {
-    "Materiel seminaires / mariages": 5000
-  },
+  "cf_directs_evenements": {},
   "charges_fixes_indirectes_par_annee": {
     "Assurances": [
       35000,
@@ -365,16 +368,6 @@
   "inflation_an": 0.025,
   "investissements": [
     {
-      "categorie": "Terrain",
-      "montant": 0,
-      "duree_amort": 0
-    },
-    {
-      "categorie": "Construction",
-      "montant": 0,
-      "duree_amort": 0
-    },
-    {
       "categorie": "Amenagements interieurs",
       "montant": 1534444,
       "duree_amort": 10
@@ -385,11 +378,73 @@
       "duree_amort": 5
     },
     {
-      "categorie": "Branding",
+      "categorie": "Branding/Communication",
       "montant": 200000,
       "duree_amort": 3
+    },
+    {
+      "categorie": "Bornes electriques",
+      "montant": 50000,
+      "duree_amort": 5
+    },
+    {
+      "categorie": "Uniformes travailleurs",
+      "montant": 8666,
+      "duree_amort": 3
+    },
+    {
+      "categorie": "Equipement brasserie",
+      "montant": 75000,
+      "duree_amort": 5
+    },
+    {
+      "categorie": "Vaisselle & couverts brasserie",
+      "montant": 40000,
+      "duree_amort": 3
+    },
+    {
+      "categorie": "Equipement salles",
+      "montant": 25000,
+      "duree_amort": 5
+    },
+    {
+      "categorie": "",
+      "montant": 0,
+      "duree_amort": 0
+    },
+    {
+      "categorie": "Autre",
+      "montant": 0,
+      "duree_amort": 0
     }
   ],
+  "investissements_supplementaires": {
+    "inv_bornes": {
+      "prix_unite": 50000,
+      "duree_amort": 5,
+      "montant": 50000
+    },
+    "inv_uniformes": {
+      "prix_unite": 200,
+      "duree_amort": 3,
+      "montant": 8666
+    },
+    "inv_equip_brass": {
+      "prix_unite": 75000,
+      "duree_amort": 5,
+      "montant": 75000
+    },
+    "inv_vaisselle": {
+      "prix_unite": 500,
+      "duree_amort": 3,
+      "montant": 40000
+    },
+    "inv_equip_salles": {
+      "prix_unite": 25000,
+      "duree_amort": 5,
+      "montant": 25000
+    }
+  },
   "reinvest_pct_an": [
     0.0,
     0.005,
@@ -400,7 +455,7 @@
     0.025,
     0.025,
     0.025,
-    0.025
+    0.03
   ],
   "reinvest_categories": [
     "Amenagements interieurs",
@@ -551,6 +606,7 @@
     "cf_loyer": 0,
     "cf_directs_hebergement": 0,
     "cf_directs_brasserie": 0,
+    "cf_directs_bar": 0,
     "cf_directs_spa": 0,
     "cf_directs_evenements": 0,
     "cf_autres_indirects": 0,
@@ -572,5 +628,31 @@
     "IT & logiciels": 0,
     "Honoraires": 1,
     "Autres CF indirects": 1
-  }
+  },
+  "cv_franchise_modes": [
+    "nuitee",
+    "forfait",
+    "pct"
+  ],
+  "cv_franchise_par_nuitee": 0.2,
+  "cv_franchise_forfait_mois": 2500.0,
+  "precompte_annees_actives": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ]
 }
