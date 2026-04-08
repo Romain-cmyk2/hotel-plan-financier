@@ -334,6 +334,16 @@ def _build_waterfall_moyens_besoins(st_mod, go_mod, prets, fonds_propres, total_
     wf_measures.append("total")
 
     _wf_vals_k = [v / 1000 for v in wf_values]
+    # Positionner les labels: inside pour les grandes barres, outside pour les petites
+    _max_abs = max(abs(v) for v in _wf_vals_k) if _wf_vals_k else 1
+    _threshold = _max_abs * 0.08
+    _positions = ["inside" if abs(v) > _threshold else "outside" for v in _wf_vals_k]
+    _text_colors = []
+    for i, v in enumerate(_wf_vals_k):
+        if abs(v) > _threshold:
+            _text_colors.append("white")
+        else:
+            _text_colors.append("#1a1a2e")
     fig_wf = go_mod.Figure(go_mod.Waterfall(
         x=wf_labels, y=_wf_vals_k,
         measure=wf_measures,
@@ -341,20 +351,22 @@ def _build_waterfall_moyens_besoins(st_mod, go_mod, prets, fonds_propres, total_
         increasing=dict(marker=dict(color="#38ef7d")),
         decreasing=dict(marker=dict(color="#f5576c")),
         totals=dict(marker=dict(color="#667eea")),
-        textposition="outside",
+        textposition=_positions,
         text=[f"<b>{v:,.0f} K\u20ac</b>" for v in _wf_vals_k],
-        textfont=dict(size=13, color="#1a1a2e"),
+        textfont=dict(size=12),
         customdata=[[v] for v in _wf_vals_k],
         hovertemplate="%{x}<br><b>%{customdata[0]:,.0f} K\u20ac</b><extra></extra>",
     ))
+    # Appliquer les couleurs de texte par barre
+    fig_wf.update_traces(textfont_color=_text_colors)
     fig_wf.update_layout(
         title=dict(text="Cascade Moyens / Besoins (K\u20ac)", font=dict(size=16, color="#1a1a2e")),
-        height=550,
-        xaxis=dict(tickfont=dict(size=11, color="#333"), tickangle=-30),
+        height=600,
+        xaxis=dict(tickfont=dict(size=10, color="#333"), tickangle=-30),
         yaxis=dict(tickformat=",.0f", title="K\u20ac", tickfont=dict(size=12)),
         showlegend=False,
-        margin=dict(t=60, b=100),
-        uniformtext=dict(minsize=10, mode="show"),
+        margin=dict(t=60, b=110),
+        uniformtext=dict(minsize=9, mode="show"),
     )
     st_mod.plotly_chart(fig_wf, use_container_width=True, config={"displayModeBar": False},
                         key=f"wf_moyens_besoins_{key_suffix}")
