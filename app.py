@@ -280,7 +280,8 @@ def _chart_with_zoom(df, col, title, color, key_id):
 
 
 def _build_waterfall_moyens_besoins(st_mod, go_mod, prets, fonds_propres, total_moyens,
-                                     total_invest, besoin_tresorerie, solde, key_suffix=""):
+                                     total_invest, besoin_tresorerie, solde, key_suffix="",
+                                     pret_intra=0, pret_intra_label="Pret a Argenteau"):
     """Graphique waterfall Moyens / Besoins reutilisable (Chateau et Rocher)."""
     wf_labels = []
     wf_values = []
@@ -311,10 +312,16 @@ def _build_waterfall_moyens_besoins(st_mod, go_mod, prets, fonds_propres, total_
     wf_values.append(total_moyens)
     wf_measures.append("total")
 
-    # Besoins (negatif)
+    # Besoins (negatif) — distinguer investissements et pret intra-groupe si applicable
+    _invest_hors_pret = total_invest - pret_intra
     wf_labels.append("Investissements")
-    wf_values.append(-total_invest)
+    wf_values.append(-_invest_hors_pret)
     wf_measures.append("relative")
+
+    if pret_intra > 0:
+        wf_labels.append(pret_intra_label)
+        wf_values.append(-pret_intra)
+        wf_measures.append("relative")
 
     if besoin_tresorerie > 0:
         wf_labels.append("Besoin tresorerie")
@@ -6140,13 +6147,15 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         with c_inv1:
             st.markdown("#### Immobiliere Rocher")
             for inv in _inv_rocher:
-                st.markdown(f"- {inv['categorie']} : **{inv['montant']:,.0f} \u20ac** "
-                            f"(amort. {inv['duree_amort']} ans)")
+                if inv["montant"] > 0:
+                    st.markdown(f"- {inv['categorie']} : **{inv['montant']:,.0f} \u20ac** "
+                                f"(amort. {inv['duree_amort']} ans)")
         with c_inv2:
             st.markdown("#### Chateau d'Argenteau")
             for inv in _inv_chateau:
-                st.markdown(f"- {inv['categorie']} : **{inv['montant']:,.0f} \u20ac** "
-                            f"(amort. {inv['duree_amort']} ans)")
+                if inv["montant"] > 0:
+                    st.markdown(f"- {inv['categorie']} : **{inv['montant']:,.0f} \u20ac** "
+                                f"(amort. {inv['duree_amort']} ans)")
 
         c_t1, c_t2 = st.columns(2)
         with c_t1:
@@ -6201,14 +6210,19 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             _wf_pr_r = [{"nom": pr["nom"], "montant": pr["montant"]} for pr in _rocher_prets_mb]
             _build_waterfall_moyens_besoins(
                 st, go, _wf_pr_r, _rocher_fp_mb, _total_moyens_r_mb,
-                _total_inv_r_mb + _pret_au_ch_mb, 0, _solde_r_mb, "rpt_rocher"
+                _total_inv_r_mb + _pret_au_ch_mb, 0, _solde_r_mb, "rpt_rocher",
+                pret_intra=_pret_au_ch_mb, pret_intra_label="Pret a Argenteau"
             )
 
         # Waterfall consolide (les 2 entites aggregees)
+        # Le pret intra-groupe (Rocher → Chateau) s'annule en conso : exclu des moyens ET des besoins
         st.markdown("#### Vue consolidee")
-        # Agreger les prets par nom
+        # Agreger les prets par nom, en excluant le pret Rocher cote Chateau
+        _pret_rocher_nom = _pret_rocher_ch["nom"].lower() if _pret_rocher_ch else ""
         _all_prets_conso = {}
         for pr in _prets_ch_mb:
+            if pr["nom"].lower() == _pret_rocher_nom:
+                continue
             _n = pr["nom"]
             _all_prets_conso[_n] = _all_prets_conso.get(_n, 0) + pr["montant"]
         for pr in _rocher_prets_mb:
@@ -6216,15 +6230,34 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             _all_prets_conso[_n] = _all_prets_conso.get(_n, 0) + pr["montant"]
         _prets_conso = [{"nom": n, "montant": m} for n, m in _all_prets_conso.items()]
         _fp_conso = _fp_ch_mb + _rocher_fp_mb
-        _total_moyens_conso = _total_moyens_ch_mb + _total_moyens_r_mb
-        # Besoins consolides : invest Rocher + invest Chateau + besoin treso Chateau (pret intra-groupe s'annule)
+        _total_moyens_conso = sum(pr["montant"] for pr in _prets_conso) + _fp_conso
+        # Besoins consolides : invest Rocher + invest Chateau + besoin treso (sans pret intra-groupe)
         _total_inv_conso = _total_inv_ch_mb + _total_inv_r_mb
-        _total_besoins_conso = _total_inv_conso + _besoin_treso_ch + _pret_au_ch_mb
+        _total_besoins_conso = _total_inv_conso + _besoin_treso_ch
         _solde_conso = _total_moyens_conso - _total_besoins_conso
         _build_waterfall_moyens_besoins(
             st, go, _prets_conso, _fp_conso, _total_moyens_conso,
-            _total_inv_conso + _pret_au_ch_mb, _besoin_treso_ch, _solde_conso, "rpt_conso"
+            _total_inv_conso, _besoin_treso_ch, _solde_conso, "rpt_conso"
         )
+
+        # Rappel reinvestissement annuel
+        _reinvest_pct_list = p.get("reinvest_pct_an", [])
+        _reinvest_base = sum(inv["montant"] for inv in p.get("investissements", []) if inv.get("duree_amort", 0) > 0)
+        if _reinvest_pct_list and _reinvest_base > 0:
+            _pct_moyen = sum(_reinvest_pct_list) / len(_reinvest_pct_list) * 100
+            _pct_max = max(_reinvest_pct_list) * 100
+            st.markdown("---")
+            st.markdown(
+                f'<div style="background:#f0f4ff; border-left:4px solid #667eea; padding:14px 18px; '
+                f'border-radius:6px; margin-top:16px; font-size:0.95em; line-height:1.6; color:#1a1a2e;">'
+                f'<b>Reinvestissements prevus</b> : un reinvestissement annuel est prevu, '
+                f'correspondant a un pourcentage de l\'investissement initial amortissable '
+                f'({_reinvest_base:,.0f} \u20ac). '
+                f'Le taux varie de <b>{_reinvest_pct_list[0]*100:.1f}%</b> (annee 1) '
+                f'a <b>{_pct_max:.1f}%</b> (a partir de l\'annee {_reinvest_pct_list.index(max(_reinvest_pct_list))+1}), '
+                f'soit en moyenne <b>{_pct_moyen:.1f}%</b> par an.</div>',
+                unsafe_allow_html=True
+            )
 
         # ════════════════════════════════════════════════════════════════════
         # 7. PLAN FINANCIER ROCHER
@@ -6513,14 +6546,17 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             + _r(f'Saisonnalite mensuelle appliquee', f'Franchise : <b>{" + ".join(_franchise_desc) if _franchise_desc else "Aucune"}</b>', '')
             + '</tbody></table>', unsafe_allow_html=True)
 
-        # Graphique saisonnalite
+        # Graphique saisonnalite (ligne avec voile)
         _saison = p.get("saisonnalite", [1]*12)
         _mois_labels = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"]
-        _colors_saison = ["#e74c3c" if s < 0.9 else "#f39c12" if s < 1.05 else "#27ae60" for s in _saison]
         fig_saison = go.Figure()
-        fig_saison.add_trace(go.Bar(x=_mois_labels, y=_saison, marker_color=_colors_saison,
-            text=[f"<b>{s:.2f}</b>" for s in _saison], textposition="outside",
-            textfont=dict(size=11), hovertemplate="%{x} : %{y:.3f}<extra></extra>"))
+        fig_saison.add_trace(go.Scatter(
+            x=_mois_labels, y=_saison, mode="lines+markers+text",
+            line=dict(color="#4facfe", width=3), marker=dict(size=8, color="#4facfe"),
+            fill="tozeroy", fillcolor="rgba(79, 172, 254, 0.15)",
+            text=[f"<b>{s:.2f}</b>" for s in _saison], textposition="top center",
+            textfont=dict(size=11, color="#1a1a2e"),
+            hovertemplate="%{x} : %{y:.3f}<extra></extra>"))
         fig_saison.add_hline(y=1.0, line_dash="dash", line_color="#888", opacity=0.5)
         fig_saison.update_layout(title="Coefficients de saisonnalite mensuelle", height=320,
             xaxis=dict(type="category"), yaxis=dict(range=[0, max(_saison)*1.15], title="Coefficient"),
