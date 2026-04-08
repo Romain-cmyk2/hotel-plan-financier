@@ -333,26 +333,28 @@ def _build_waterfall_moyens_besoins(st_mod, go_mod, prets, fonds_propres, total_
     wf_values.append(solde)
     wf_measures.append("total")
 
+    _wf_vals_k = [v / 1000 for v in wf_values]
     fig_wf = go_mod.Figure(go_mod.Waterfall(
-        x=wf_labels, y=[v / 1000 for v in wf_values],
+        x=wf_labels, y=_wf_vals_k,
         measure=wf_measures,
         connector=dict(line=dict(color="rgba(0,0,0,0.3)", width=1)),
         increasing=dict(marker=dict(color="#38ef7d")),
         decreasing=dict(marker=dict(color="#f5576c")),
         totals=dict(marker=dict(color="#667eea")),
         textposition="outside",
-        text=[f"<b>{v/1000:,.0f} K\u20ac</b>" for v in wf_values],
-        textfont=dict(size=14, color="#1a1a2e"),
-        hovertemplate="%{x}<br><b>%{y:,.0f} K\u20ac</b><extra></extra>",
+        text=[f"<b>{v:,.0f} K\u20ac</b>" for v in _wf_vals_k],
+        textfont=dict(size=13, color="#1a1a2e"),
+        customdata=[[v] for v in _wf_vals_k],
+        hovertemplate="%{x}<br><b>%{customdata[0]:,.0f} K\u20ac</b><extra></extra>",
     ))
     fig_wf.update_layout(
         title=dict(text="Cascade Moyens / Besoins (K\u20ac)", font=dict(size=16, color="#1a1a2e")),
         height=550,
-        xaxis=dict(tickfont=dict(size=12, color="#333"), tickangle=-30),
+        xaxis=dict(tickfont=dict(size=11, color="#333"), tickangle=-30),
         yaxis=dict(tickformat=",.0f", title="K\u20ac", tickfont=dict(size=12)),
         showlegend=False,
-        margin=dict(t=60, b=90),
-        uniformtext=dict(minsize=12, mode="show"),
+        margin=dict(t=60, b=100),
+        uniformtext=dict(minsize=10, mode="show"),
     )
     st_mod.plotly_chart(fig_wf, use_container_width=True, config={"displayModeBar": False},
                         key=f"wf_moyens_besoins_{key_suffix}")
@@ -6197,21 +6199,21 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _total_besoins_r_mb = _total_inv_r_mb + _pret_au_ch_mb
         _solde_r_mb = _total_moyens_r_mb - _total_besoins_r_mb
 
-        # Waterfalls par entite
+        # Waterfalls par entite (Rocher en premier, puis Chateau)
         _c_mb1, _c_mb2 = st.columns(2)
         with _c_mb1:
-            st.markdown("#### Chateau d'Argenteau")
-            _build_waterfall_moyens_besoins(
-                st, go, _prets_ch_mb, _fp_ch_mb, _total_moyens_ch_mb,
-                _total_inv_ch_mb, _besoin_treso_ch, _solde_ch_mb, "rpt_chateau"
-            )
-        with _c_mb2:
             st.markdown("#### Immobiliere Rocher")
             _wf_pr_r = [{"nom": pr["nom"], "montant": pr["montant"]} for pr in _rocher_prets_mb]
             _build_waterfall_moyens_besoins(
                 st, go, _wf_pr_r, _rocher_fp_mb, _total_moyens_r_mb,
                 _total_inv_r_mb + _pret_au_ch_mb, 0, _solde_r_mb, "rpt_rocher",
                 pret_intra=_pret_au_ch_mb, pret_intra_label="Pret a Argenteau"
+            )
+        with _c_mb2:
+            st.markdown("#### Chateau d'Argenteau")
+            _build_waterfall_moyens_besoins(
+                st, go, _prets_ch_mb, _fp_ch_mb, _total_moyens_ch_mb,
+                _total_inv_ch_mb, _besoin_treso_ch, _solde_ch_mb, "rpt_chateau"
             )
 
         # Waterfall consolide (les 2 entites aggregees)
