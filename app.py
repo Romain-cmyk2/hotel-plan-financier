@@ -6678,20 +6678,20 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # ── Graphiques par service (avant frais fixes indirects) ──
         st.markdown("---")
 
-        # Ventes par service (avec loyer restaurant)
+        # Ventes par service (avec loyer restaurant et subside)
         fig = go.Figure()
         for col, lbl, clr in [("ca_hebergement","Hebergement","#667eea"),("ca_brasserie","Brasserie","#f5576c"),
             ("ca_bar","Bar","#ffcc00"),("ca_spa","Spa","#11998e"),("ca_salles","Salles","#a0522d"),
-            ("ca_loyer_restaurant","Location resto.","#ff8c00")]:
+            ("ca_loyer_restaurant","Location resto.","#ff8c00"),("subside_rw","Subside RW","#f093fb")]:
             fig.add_trace(go.Bar(x=_x, y=K(_ann[col]), name=lbl, marker_color=clr))
-        _ca_tots = K(_ann["ca_total"])
-        fig.add_trace(go.Scatter(x=_x, y=_ca_tots, mode="markers+text",
-            text=[f"<b>{v:,.0f}</b>" for v in _ca_tots], textposition="top center",
+        _ca_tots_sub = K(_ann["ca_total"] + _ann["subside_rw"])
+        fig.add_trace(go.Scatter(x=_x, y=_ca_tots_sub, mode="markers+text",
+            text=[f"<b>{v:,.0f}</b>" for v in _ca_tots_sub], textposition="top center",
             textfont=dict(size=11, color="#1a1a6e"), marker=dict(size=1, color="rgba(0,0,0,0)"),
             showlegend=False, hoverinfo="skip", cliponaxis=False))
-        fig.update_layout(title="Ventes par service (K\u20ac)", height=420, barmode="stack",
+        fig.update_layout(title="Ventes par service + Subside (K\u20ac)", height=420, barmode="stack",
             xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
-            range=[0, max(_ca_tots)*1.18] if len(_ca_tots)>0 else None), legend=_leg)
+            range=[0, max(_ca_tots_sub)*1.18] if len(_ca_tots_sub)>0 else None), legend=_leg)
         _show_fig(fig, key="ch_ventes_hyp")
 
         # Charges variables par service
@@ -7659,9 +7659,10 @@ def main():
         # ── 1. RESULTATS ──
         with sub_resultats:
             st.markdown("### Par service")
-            _proj_chart("Ventes par service", [
+            _proj_chart("Ventes par service + Subside", [
                 ("ca_hebergement","Hebergement","#667eea"),("ca_brasserie","Brasserie","#f5576c"),
                 ("ca_bar","Bar","#ffcc00"),("ca_spa","Spa","#11998e"),("ca_salles","Salles","#a0522d"),
+                ("subside_rw","Subside RW","#f093fb"),
             ], "ca_svc", show_totals=True, total_col="ca_total")
 
             _proj_chart("Charges variables par service", [
