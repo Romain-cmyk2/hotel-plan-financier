@@ -7553,12 +7553,12 @@ def main():
     # Calculs
     with st.spinner("Calcul de la projection..."):
         df = projection_complete(p)
-        # Marges mensuelles ventilees par service
-        df["marge_heberg"] = df["ca_hebergement"] - df["cv_hebergement"]
-        df["marge_brass"] = df["ca_brasserie"] - df["cv_brasserie"]
-        df["marge_bar"] = df["ca_bar"] - df["cv_bar"]
-        df["marge_spa"] = df["ca_spa"] - df["cv_spa"]
-        df["marge_salles"] = df["ca_salles"] - df["cv_salles"]
+        # Marges mensuelles ventilees par service (ventes - CV - frais fixes directs)
+        df["marge_heberg"] = df["ca_hebergement"] - df["cv_hebergement"] - df.get("cf_directs_hebergement", 0)
+        df["marge_brass"] = df["ca_brasserie"] - df["cv_brasserie"] - df.get("cf_directs_brasserie", 0)
+        df["marge_bar"] = df["ca_bar"] - df["cv_bar"] - df.get("cf_directs_bar", 0)
+        df["marge_spa"] = df["ca_spa"] - df["cv_spa"] - df.get("cf_directs_spa", 0)
+        df["marge_salles"] = df["ca_salles"] - df["cv_salles"] - df.get("cf_directs_evenements", 0)
         st.session_state["_projection_df"] = df
         indic_expl = indicateurs_annuels(df, p, par_calendaire=False)
         indic = indicateurs_annuels(df, p, par_calendaire=True)
@@ -7595,12 +7595,12 @@ def main():
             "cf_personnel": "sum", "cf_personnel_direct": "sum",
         }).reset_index()
         _x = [str(int(a)) for a in _ann["annee"]]
-        # Marges ventilees par service
-        _ann["marge_heberg"] = _ann["ca_hebergement"] - _ann["cv_hebergement"]
-        _ann["marge_brass"] = _ann["ca_brasserie"] - _ann["cv_brasserie"]
-        _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"]
-        _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"]
-        _ann["marge_salles"] = _ann["ca_salles"] - _ann["cv_salles"]
+        # Marges ventilees par service (ventes - CV - frais fixes directs)
+        _ann["marge_heberg"] = _ann["ca_hebergement"] - _ann["cv_hebergement"] - _ann["cf_directs_hebergement"]
+        _ann["marge_brass"] = _ann["ca_brasserie"] - _ann["cv_brasserie"] - _ann["cf_directs_brasserie"]
+        _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"] - _ann["cf_directs_bar"]
+        _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"] - _ann["cf_directs_spa"]
+        _ann["marge_salles"] = _ann["ca_salles"] - _ann["cv_salles"] - _ann["cf_directs_evenements"]
 
         def _proj_chart(title, traces_config, key_id, height=450, barmode="stack",
                         show_totals=False, total_col=None, extra_lines=None):
