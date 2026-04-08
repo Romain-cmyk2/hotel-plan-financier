@@ -6745,7 +6745,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             ("marge_resto","Location resto.","#ff8c00"),("subside_rw","Subside RW","#f093fb")]
         for col, lbl, clr in _marge_services_hyp:
             fig.add_trace(go.Bar(x=_x, y=K(_ann[col]), name=lbl, marker_color=clr))
-        _marge_tot_hyp = K(_ann["marge_heberg"] + _ann["marge_brass"] + _ann["marge_bar"] + _ann["marge_spa"] + _ann["marge_salles"] + _ann["marge_resto"] + _ann["subside_rw"])
+        _marge_tot_hyp = K(_ann["marge"] + _ann["subside_rw"])
         _max_mh = max(_marge_tot_hyp) if len(_marge_tot_hyp) > 0 else 1
         fig.add_trace(go.Scatter(x=_x, y=[v + _max_mh * 0.04 for v in _marge_tot_hyp], mode="text",
             text=[f"<b>{v:,.0f}</b>" for v in _marge_tot_hyp], textposition="top center",
