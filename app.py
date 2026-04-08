@@ -5724,7 +5724,10 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             "ca_loyer_restaurant": "sum", "ca_divers": "sum",
             "cv_total": "sum", "cv_hebergement": "sum", "cv_brasserie": "sum",
             "cv_bar": "sum", "cv_spa": "sum",
-            "cf_directs_total": "sum", "cf_indirects_total": "sum",
+            "cf_directs_total": "sum",
+            "cf_directs_hebergement": "sum", "cf_directs_brasserie": "sum",
+            "cf_directs_bar": "sum", "cf_directs_spa": "sum", "cf_directs_evenements": "sum",
+            "cf_indirects_total": "sum",
             "marge_brute": "sum", "marge": "sum", "subside_rw": "sum",
             "ebitda": "sum", "amortissement": "sum", "ebit": "sum",
             "dette_interets": "sum", "dette_capital": "sum",
@@ -6731,11 +6734,11 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
 
         # Marge par service + Subside (marge = ventes - CV - frais fixes directs)
         fig = go.Figure()
-        _ann["marge_heberg"] = _ann["ca_hebergement"] - _ann["cv_hebergement"] - _ann.get("cf_directs_hebergement", 0)
-        _ann["marge_brass"] = _ann["ca_brasserie"] - _ann["cv_brasserie"] - _ann.get("cf_directs_brasserie", 0)
-        _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"] - _ann.get("cf_directs_bar", 0)
-        _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"] - _ann.get("cf_directs_spa", 0)
-        _ann["marge_salles"] = _ann["ca_salles"] - _ann.get("cf_directs_evenements", 0)
+        _ann["marge_heberg"] = _ann["ca_hebergement"] - _ann["cv_hebergement"] - _ann["cf_directs_hebergement"]
+        _ann["marge_brass"] = _ann["ca_brasserie"] - _ann["cv_brasserie"] - _ann["cf_directs_brasserie"]
+        _ann["marge_bar"] = _ann["ca_bar"] - _ann["cv_bar"] - _ann["cf_directs_bar"]
+        _ann["marge_spa"] = _ann["ca_spa"] - _ann["cv_spa"] - _ann["cf_directs_spa"]
+        _ann["marge_salles"] = _ann["ca_salles"] - _ann["cf_directs_evenements"]
         _ann["marge_resto"] = _ann.get("ca_loyer_restaurant", 0)
         _marge_services_hyp = [("marge_heberg","Hebergement","#667eea"),("marge_brass","Brasserie","#f5576c"),
             ("marge_bar","Bar","#ffcc00"),("marge_spa","Spa","#11998e"),("marge_salles","Salles","#a0522d"),
