@@ -5788,15 +5788,24 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # Chiffres cles en cartes
         _total_inv_all = sum(i["montant"] for i in p.get("investissements", [])) + sum(i["montant"] for i in rd.get("investissements", []))
         _total_fp_all = fp_ch + fp_ro
-        # Exclure le pret intra-groupe (Rocher → Chateau) de l'endettement total
-        _total_dette_ch_ext = sum(pr["montant"] for pr in prets_ch if "rocher" not in pr.get("nom", "").lower())
-        _total_dette_all = _total_dette_ch_ext + sum(pr["montant"] for pr in prets_ro)
+        # Endettement ventile par type (exclure pret intra-groupe Rocher → Chateau)
+        _dette_bancaire_non_garanti = (
+            sum(pr["montant"] for pr in prets_ch if not pr.get("subside_rw") and "rocher" not in pr.get("nom", "").lower())
+            + sum(pr["montant"] for pr in prets_ro if not pr.get("subside_rw") and pr.get("creancier", "Banque") == "Banque")
+        )
+        _dette_garanti_rw = (
+            sum(pr["montant"] for pr in prets_ch if pr.get("subside_rw"))
+            + sum(pr["montant"] for pr in prets_ro if pr.get("subside_rw"))
+        )
+        _dette_partenaire = sum(pr["montant"] for pr in prets_ro if not pr.get("subside_rw") and pr.get("creancier", "Banque") != "Banque")
+        _total_dette_all = _dette_bancaire_non_garanti + _dette_garanti_rw + _dette_partenaire
         _kpi_style = (
             'text-align:center; padding:14px 8px; background:linear-gradient(135deg,{bg1},{bg2}); '
             'border-radius:10px; border-left:4px solid {clr};'
         )
         _kpi_val = '<div style="font-size:1.5em; font-weight:bold; color:{clr};">{val}</div>'
         _kpi_lbl = '<div style="font-size:0.8em; color:#666; margin-top:2px;">{lbl}</div>'
+        _kpi_sub = '<div style="font-size:0.65em; color:{clr}; margin-top:1px;">{txt}</div>'
         k1, k2, k3, k4 = st.columns(4)
         with k1:
             st.markdown(f'<div style="{_kpi_style.format(bg1="#eef2ff", bg2="#e0e7ff", clr="#4f46e5")}">'
@@ -5811,9 +5820,15 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                         f'{_kpi_val.format(clr="#2563eb", val=f"{_total_fp_all/1e6:,.1f} M\u20ac")}'
                         f'{_kpi_lbl.format(lbl="Fonds propres")}</div>', unsafe_allow_html=True)
         with k4:
+            _dette_details = (
+                f'{_kpi_sub.format(clr="#b91c1c", txt=f"Bancaire non garanti : {_dette_bancaire_non_garanti/1e6:,.1f} M\u20ac")}'
+                f'{_kpi_sub.format(clr="#c2410c", txt=f"Garanti RW : {_dette_garanti_rw/1e6:,.1f} M\u20ac")}'
+                + (f'{_kpi_sub.format(clr="#7c3aed", txt=f"Partenaire : {_dette_partenaire/1e6:,.1f} M\u20ac")}' if _dette_partenaire > 0 else '')
+            )
             st.markdown(f'<div style="{_kpi_style.format(bg1="#fef2f2", bg2="#fee2e2", clr="#dc2626")}">'
                         f'{_kpi_val.format(clr="#dc2626", val=f"{_total_dette_all/1e6:,.1f} M\u20ac")}'
-                        f'{_kpi_lbl.format(lbl="Endettement total")}</div>', unsafe_allow_html=True)
+                        f'{_kpi_lbl.format(lbl="Endettement total")}'
+                        f'{_dette_details}</div>', unsafe_allow_html=True)
 
         st.caption(f"Debut d'activite : **{p['date_ouverture'].strftime('%B %Y')}** | "
                    f"Projection : **{p['nb_mois_projection']//12} ans**")
@@ -6420,10 +6435,10 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _show_fig(fig, key="ro_cashflow")
 
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=xr, y=[fp_ro/1000]*len(xr), name="FP initiaux", marker_color="#38ef7d"))
         _cp_ro_k = K(fp_ro + ann_ro["res_cumul"])
         fig.add_trace(go.Scatter(x=xr, y=_cp_ro_k, name="Capitaux propres", mode="lines+markers+text",
             line=dict(color="#667eea", width=3),
+            fill="tozeroy", fillcolor="rgba(102, 126, 234, 0.15)",
             text=[f"<b>{v:,.0f}</b>" for v in _cp_ro_k],
             textposition="top center", textfont=dict(size=11, color="#3b3b98")))
         fig.update_layout(title="Rocher — Fonds propres (K\u20ac)", height=500, xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f"), legend=_leg)
@@ -6640,8 +6655,9 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _cf_bar_elec = p.get("cf_directs_bar", {}).get("Electricite", 0) if isinstance(p.get("cf_directs_bar"), dict) else 0
         st.markdown(f'**3. Bar**', unsafe_allow_html=True)
         st.markdown(_tbl
-            + _r(f'Prix moyen : <b>{p.get("bar_prix_moyen", 18):,.0f} \u20ac</b>', f'Beverage cost : <b>{_cv_bar_pct:.0%}</b>', f'Personnel : <b>{_etp_bar:.1f} ETP</b>')
-            + _r(f'Taux clients hotel : <b>{p.get("bar_taux_clients_hotel", 0.40):.0%}</b>', f'Consommables : <b>{_cv_bar_conso:.2f} \u20ac/conso</b>', f'Masse salariale : <b>{_masse_bar:,.0f} \u20ac/an</b>')
+            + _r(f'Prix client interne : <b>{p.get("bar_conso_moyenne", 22):,.0f} \u20ac</b>', f'Beverage cost : <b>{_cv_bar_pct:.0%}</b>', f'Personnel : <b>{_etp_bar:.1f} ETP</b>')
+            + _r(f'Prix client externe : <b>{p.get("bar_conso_ext_moyenne", 25):,.0f} \u20ac</b>', f'Consommables : <b>{_cv_bar_conso:.2f} \u20ac/conso</b>', f'Masse salariale : <b>{_masse_bar:,.0f} \u20ac/an</b>')
+            + _r(f'Taux clients hotel : <b>{p.get("bar_taux_clients_hotel", 0.40):.0%}</b>', '', '')
             + _r('', '', f'Electricite : <b>{_cf_bar_elec:,.0f} \u20ac/an</b>' if _cf_bar_elec > 0 else '')
             + '</tbody></table>', unsafe_allow_html=True)
 
@@ -6684,62 +6700,8 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             + _r(f'Loyer mensuel : <b>{_loyer_resto:,.0f} \u20ac/mois</b> ({_loyer_resto*12:,.0f} \u20ac/an)', '', '')
             + '</tbody></table>', unsafe_allow_html=True)
 
-        # ── Graphiques par service (avant frais fixes indirects) ──
+        # ── Graphiques par service ──
         st.markdown("---")
-
-        # Ventes par service (avec loyer restaurant et subside)
-        fig = go.Figure()
-        for col, lbl, clr in [("ca_hebergement","Hebergement","#667eea"),("ca_brasserie","Brasserie","#f5576c"),
-            ("ca_bar","Bar","#ffcc00"),("ca_spa","Spa","#11998e"),("ca_salles","Salles","#a0522d"),
-            ("ca_loyer_restaurant","Location resto.","#ff8c00"),("subside_rw","Subside RW","#f093fb")]:
-            fig.add_trace(go.Bar(x=_x, y=K(_ann[col]), name=lbl, marker_color=clr))
-        _ca_tots_sub = K(_ann["ca_total"] + _ann["subside_rw"])
-        fig.add_trace(go.Scatter(x=_x, y=_ca_tots_sub, mode="markers+text",
-            text=[f"<b>{v:,.0f}</b>" for v in _ca_tots_sub], textposition="top center",
-            textfont=dict(size=11, color="#1a1a6e"), marker=dict(size=1, color="rgba(0,0,0,0)"),
-            showlegend=False, hoverinfo="skip", cliponaxis=False))
-        fig.update_layout(title="Ventes par service + Subside (K\u20ac)", height=420, barmode="stack",
-            xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
-            range=[0, max(_ca_tots_sub)*1.18] if len(_ca_tots_sub)>0 else None), legend=_leg)
-        _show_fig(fig, key="ch_ventes_hyp")
-
-        # Charges variables par service
-        fig = go.Figure()
-        for col, lbl, clr in [("cv_hebergement","Hebergement","#667eea"),("cv_brasserie","Brasserie","#f5576c"),
-            ("cv_bar","Bar","#ffcc00"),("cv_spa","Spa","#11998e")]:
-            fig.add_trace(go.Bar(x=_x, y=K(_ann[col]), name=lbl, marker_color=clr))
-        _cv_tots = K(_ann["cv_total"])
-        fig.add_trace(go.Scatter(x=_x, y=_cv_tots, mode="markers+text",
-            text=[f"<b>{v:,.0f}</b>" for v in _cv_tots], textposition="top center",
-            textfont=dict(size=11, color="#1a1a6e"), marker=dict(size=1, color="rgba(0,0,0,0)"),
-            showlegend=False, hoverinfo="skip", cliponaxis=False))
-        fig.update_layout(title="Charges variables par service (K\u20ac)", height=420, barmode="stack",
-            xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
-            range=[0, max(_cv_tots)*1.18] if len(_cv_tots)>0 else None), legend=_leg)
-        _show_fig(fig, key="ch_cv_hyp")
-
-        # Frais fixes directs par service
-        _cfd_h = _masse_h + sum(p.get("cf_directs_hebergement", {}).values())
-        _cfd_b = _masse_b + sum(p.get("cf_directs_brasserie", {}).values())
-        _cfd_bar = _masse_bar + sum(v for v in (p.get("cf_directs_bar", {}) if isinstance(p.get("cf_directs_bar"), dict) else {}).values())
-        _cfd_s = _masse_s + sum(p.get("cf_directs_spa", {}).values())
-        _cfd_e = _masse_e + sum(p.get("cf_directs_evenements", {}).values())
-        _cfd_total_base_h = _cfd_h + _cfd_b + _cfd_bar + _cfd_s + _cfd_e
-        _cf_dir_k = K(_ann["cf_directs_total"])
-        fig = go.Figure()
-        for _dept_lbl, _dept_val, _dept_clr in [
-            ("Hebergement", _cfd_h, "#667eea"), ("Brasserie", _cfd_b, "#f5576c"),
-            ("Bar", _cfd_bar, "#ffcc00"), ("Spa", _cfd_s, "#11998e"), ("Evenements", _cfd_e, "#a0522d")]:
-            _pct_d = _dept_val / _cfd_total_base_h if _cfd_total_base_h > 0 else 0
-            fig.add_trace(go.Bar(x=_x, y=[v * _pct_d for v in _cf_dir_k], name=_dept_lbl, marker_color=_dept_clr))
-        fig.add_trace(go.Scatter(x=_x, y=_cf_dir_k, mode="markers+text",
-            text=[f"<b>{v:,.0f}</b>" for v in _cf_dir_k], textposition="top center",
-            textfont=dict(size=11, color="#1a1a6e"), marker=dict(size=1, color="rgba(0,0,0,0)"),
-            showlegend=False, hoverinfo="skip", cliponaxis=False))
-        fig.update_layout(title="Frais fixes directs par service (K\u20ac)", height=400, barmode="stack",
-            xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f",
-            range=[0, max(_cf_dir_k)*1.18] if len(_cf_dir_k)>0 else None), legend=_leg)
-        _show_fig(fig, key="ch_cf_dir_hyp")
 
         # Marge par service + Subside (marge = ventes - CV - frais fixes directs)
         fig = go.Figure()
