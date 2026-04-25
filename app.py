@@ -5923,25 +5923,45 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                 ("sec-7", "7. Plan Chateau", "#f5576c"),
                 ("sec-8", "8. Simulation", "#764ba2"),
             ]
+            # Streamlit rend le HTML dans des iframes pour st.components mais
+            # le st.markdown s'execute dans le DOM principal. On utilise un
+            # composant HTML dedie qui scroll le parent via window.parent.
             _toc_links = "".join(
-                f'<a href="#{aid}" style="display:inline-block; padding:6px 12px; '
-                f'margin:3px 4px; background:{clr}15; color:{clr}; border:1px solid {clr}50; '
-                f'border-radius:6px; text-decoration:none; font-size:0.85em; font-weight:600; '
-                f'transition:all 0.2s;" '
+                f'<button onclick="scrollToSec(\'{aid}\')" '
+                f'style="display:inline-block; padding:6px 12px; margin:3px 4px; '
+                f'background:{clr}15; color:{clr}; border:1px solid {clr}50; '
+                f'border-radius:6px; font-size:0.85em; font-weight:600; cursor:pointer; '
+                f'font-family:inherit;" '
                 f'onmouseover="this.style.background=\'{clr}\';this.style.color=\'white\';" '
                 f'onmouseout="this.style.background=\'{clr}15\';this.style.color=\'{clr}\';">'
-                f'{lbl}</a>'
+                f'{lbl}</button>'
                 for aid, lbl, clr in _toc_sections
             )
-            st.markdown(
-                f'<div style="position:sticky; top:55px; z-index:100; background:white; '
-                f'padding:10px 14px; margin:8px 0 16px 0; border-radius:10px; '
-                f'box-shadow:0 2px 8px rgba(0,0,0,0.08); border:1px solid #e5e7eb;">'
-                f'<div style="font-size:0.75em; font-weight:700; color:#6b7280; '
-                f'text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Sommaire</div>'
-                f'<div>{_toc_links}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
+            import streamlit.components.v1 as _toc_comp
+            _toc_comp.html(
+                f"""
+                <html><head><style>
+                body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+                .toc {{ background:white; padding:10px 14px; border-radius:10px;
+                       box-shadow:0 2px 8px rgba(0,0,0,0.08); border:1px solid #e5e7eb; }}
+                .toc-label {{ font-size:0.75em; font-weight:700; color:#6b7280;
+                             text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }}
+                </style><script>
+                function scrollToSec(id) {{
+                    const doc = window.parent.document;
+                    const el = doc.getElementById(id);
+                    if (el) {{
+                        el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
+                    }}
+                }}
+                </script></head><body>
+                <div class="toc">
+                    <div class="toc-label">Sommaire</div>
+                    <div>{_toc_links}</div>
+                </div>
+                </body></html>
+                """,
+                height=110,
             )
 
         # ════════════════════════════════════════════════════════════════════
