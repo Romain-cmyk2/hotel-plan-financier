@@ -5923,66 +5923,27 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                 ("sec-7", "7. Chateau", "#f5576c"),
                 ("sec-8", "8. Simulation", "#764ba2"),
             ]
-            # Sommaire avec boutons Streamlit natifs (fiables, contournent les
-            # restrictions iframe). Au clic, on stocke la cible dans session_state
-            # et on injecte un script de scroll au prochain rerun.
+            # Sommaire avec liens HTML natifs dans st.markdown.
+            # st.markdown rend dans le DOM principal Streamlit (pas dans un
+            # iframe sandboxe), donc les liens <a href="#sec-X"> peuvent
+            # naviguer librement vers les ancres dans le meme frame.
+            _toc_links = "".join(
+                f'<a href="#{aid}" style="display:inline-block; padding:6px 12px; '
+                f'margin:3px 4px; background:{clr}15; color:{clr}; border:1px solid {clr}50; '
+                f'border-radius:6px; text-decoration:none; font-size:0.85em; font-weight:600;">'
+                f'{lbl}</a>'
+                for aid, lbl, clr in _toc_sections
+            )
             st.markdown(
-                '<div style="font-size:0.75em; font-weight:700; color:#6b7280; '
-                'text-transform:uppercase; letter-spacing:1px; margin:8px 0 4px 0;">Sommaire</div>',
+                f'<div style="background:white; padding:10px 14px; margin:8px 0 16px 0; '
+                f'border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.08); '
+                f'border:1px solid #e5e7eb;">'
+                f'<div style="font-size:0.75em; font-weight:700; color:#6b7280; '
+                f'text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Sommaire</div>'
+                f'<div>{_toc_links}</div>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
-            _toc_cols = st.columns(len(_toc_sections))
-            for _i, (_aid, _lbl, _clr) in enumerate(_toc_sections):
-                with _toc_cols[_i]:
-                    if st.button(_lbl, key=f"toc_btn_{_aid}", use_container_width=True):
-                        st.session_state["_scroll_to_section"] = _aid
-
-            # Si une section est en attente de scroll, injecter un script qui
-            # tente plusieurs strategies en cascade et affiche un message
-            # de diagnostic si rien ne fonctionne.
-            if "_scroll_to_section" in st.session_state:
-                _scroll_target = st.session_state.pop("_scroll_to_section")
-                import streamlit.components.v1 as _scroll_comp
-                _scroll_comp.html(
-                    f"""<script>
-                    (function() {{
-                        const id = '{_scroll_target}';
-                        function tryScroll() {{
-                            // Strategie 1: changer le hash du top (force le scroll natif)
-                            try {{
-                                window.top.location.hash = id;
-                            }} catch(e) {{}}
-                            try {{
-                                window.parent.location.hash = id;
-                            }} catch(e) {{}}
-                            // Strategie 2: scrollIntoView a tous les niveaux
-                            const docs = [];
-                            try {{ docs.push(window.top.document); }} catch(e) {{}}
-                            try {{ docs.push(window.parent.document); }} catch(e) {{}}
-                            docs.push(document);
-                            for (const doc of docs) {{
-                                try {{
-                                    const el = doc.getElementById(id);
-                                    if (el) {{
-                                        el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
-                                        return true;
-                                    }}
-                                }} catch(e) {{}}
-                            }}
-                            return false;
-                        }}
-                        // Essayer plusieurs fois car le DOM peut etre en cours de rendu
-                        let attempts = 0;
-                        const interval = setInterval(function() {{
-                            attempts++;
-                            if (tryScroll() || attempts > 10) {{
-                                clearInterval(interval);
-                            }}
-                        }}, 100);
-                    }})();
-                    </script>""",
-                    height=0,
-                )
 
         # ════════════════════════════════════════════════════════════════════
         # 2. MONTAGE FINANCIER
