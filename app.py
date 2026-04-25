@@ -5949,8 +5949,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 2. MONTAGE FINANCIER
         # ════════════════════════════════════════════════════════════════════
         _cmt("before_s1_montage")
-        st.markdown('<h2 id="sec-1" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
-                    '1. Montage financier</h2>', unsafe_allow_html=True)
+        st.header("1. Montage financier", anchor="sec-1", divider="blue")
 
         _prets_ro_std = [pr for pr in prets_ro if not pr.get("subside_rw")]
         _prets_ro_rw = [pr for pr in prets_ro if pr.get("subside_rw")]
@@ -6181,8 +6180,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
 
         # 2. Repartition du capital social
         _cmt("before_s2_capital")
-        st.markdown('<h2 id="sec-2" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
-                    '2. Repartition du capital social</h2>', unsafe_allow_html=True)
+        st.header("2. Repartition du capital social", anchor="sec-2", divider="blue")
 
         _c_cap1, _c_cap2 = st.columns(2)
         with _c_cap1:
@@ -6229,8 +6227,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
 
         # 3. Injection par acteur
         _cmt("before_s3_injection")
-        st.markdown('<h2 id="sec-3" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
-                    '3. Injection par acteur</h2>', unsafe_allow_html=True)
+        st.header("3. Injection par acteur", anchor="sec-3", divider="blue")
         st.caption("Recap des montants finances par acteur externe (hors Immobiliere Rocher et Chateau d'Argenteau)")
 
         # Collecter tous les acteurs et montants
@@ -6288,8 +6285,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 4. INVESTISSEMENTS INITIAUX
         # ════════════════════════════════════════════════════════════════════
         _pret_rocher_ch = next((pr for pr in prets_ch if "rocher" in pr.get("nom","").lower()), None)
-        st.markdown('<h2 id="sec-4" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
-                    '4. Investissements initiaux</h2>', unsafe_allow_html=True)
+        st.header("4. Investissements initiaux", anchor="sec-4", divider="blue")
 
         # Regrouper investissements Rocher + Chateau
         _inv_rocher = rd.get("investissements", [])
@@ -6324,8 +6320,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 7. MOYENS & BESOINS
         # ════════════════════════════════════════════════════════════════════
         _cmt("before_s6_moyens_besoins")
-        st.markdown('<h2 id="sec-5" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
-                    '5. Moyens &amp; Besoins</h2>', unsafe_allow_html=True)
+        st.header("5. Moyens & Besoins", anchor="sec-5", divider="blue")
 
         # Donnees Chateau
         _total_inv_ch_mb = sum(i["montant"] for i in p.get("investissements", []))
@@ -6415,8 +6410,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 7. PLAN FINANCIER ROCHER
         # ════════════════════════════════════════════════════════════════════
         _cmt("before_s7_rocher")
-        st.markdown('<h2 id="sec-6" style="border-bottom:3px solid #11998e; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
-                    '6. Plan financier &mdash; Immobiliere Rocher</h2>', unsafe_allow_html=True)
+        st.header("6. Plan financier — Immobiliere Rocher", anchor="sec-6", divider="green")
 
         # Commentaire editable — synthese Rocher
         _comment_key_ro = "commentaire_rocher"
@@ -6559,8 +6553,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # ════════════════════════════════════════════════════════════════════
         # 5. PLAN FINANCIER CHATEAU
         # ════════════════════════════════════════════════════════════════════
-        st.markdown('<h2 id="sec-7" style="border-bottom:3px solid #f5576c; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
-                    "7. Plan financier &mdash; Chateau d'Argenteau</h2>", unsafe_allow_html=True)
+        st.header("7. Plan financier — Chateau d'Argenteau", anchor="sec-7", divider="red")
 
         # Donnees pour commentaire et hypotheses
         total_inv_ch = sum(inv["montant"] for inv in p.get("investissements", []))
@@ -7092,8 +7085,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 8. SIMULATION (curseurs interactifs)
         # ════════════════════════════════════════════════════════════════════
         if not print_mode:
-            st.markdown('<h2 id="sec-8" style="border-bottom:3px solid #764ba2; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
-                        '8. Simulation</h2>', unsafe_allow_html=True)
+            st.header("8. Simulation", anchor="sec-8", divider="violet")
             st.caption("Faites varier les hypotheses cles et observez l'impact en temps reel sur l'EBITDA, "
                        "le Resultat Net et la tresorerie. Les variations s'appliquent sur **toute la projection**, "
                        "sauf les taux d'occupation qui se reglent par annee.")
