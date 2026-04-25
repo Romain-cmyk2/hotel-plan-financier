@@ -11,11 +11,14 @@ from plotly.subplots import make_subplots
 from datetime import date
 import json
 import os
+import copy
+import hashlib
 from pathlib import Path
 from calculs import (
     params_defaut, projection_complete, indicateurs_annuels,
     calc_tableau_pret, calc_prix_moyen_pondere, jours_dans_mois,
 )
+import github_sync
 
 # ─── Sauvegarde / Chargement des plans ────────────────────────────────────────
 
@@ -41,11 +44,61 @@ def _deserialiser_params(d):
     return d
 
 
-def sauvegarder_plan(nom, p):
-    """Sauvegarde les parametres sous un nom donne."""
+def _sync_plans_from_github_once():
+    """
+    Au premier run de la session, telecharge les plans depuis GitHub pour
+    contourner le filesystem ephemere de Streamlit Cloud, puis indexe les
+    hashs locaux pour eviter les pushs vides ulterieurs. Idempotent.
+    """
+    if st.session_state.get("_plans_synced", False):
+        return
+    if github_sync.is_enabled():
+        try:
+            github_sync.sync_directory_from_github(PLANS_DIR, "plans")
+        except Exception:
+            pass
+        # Pre-remplir les hashs avec l'etat actuel du filesystem,
+        # de sorte que le 1er auto-save sans vraie modif ne pousse pas.
+        for f in PLANS_DIR.glob("*.json"):
+            try:
+                contenu = f.read_text(encoding="utf-8")
+                st.session_state[f"_last_pushed_hash::{f.stem}"] = (
+                    hashlib.md5(contenu.encode("utf-8")).hexdigest()
+                )
+            except OSError:
+                pass
+    st.session_state["_plans_synced"] = True
+
+
+def sauvegarder_plan(nom, p, local_only=False):
+    """
+    Sauvegarde locale + push GitHub (sauf si local_only=True).
+    Le push GitHub n'est fait que sur sauvegarde explicite (bouton). Les
+    auto-save ecrivent uniquement en local pour eviter de polluer l'historique
+    avec les rerun Streamlit (chaque interaction declenche _auto_save).
+    """
     fichier = PLANS_DIR / f"{nom}.json"
+    contenu = json.dumps(_serialiser_params(p), ensure_ascii=False, indent=2)
     with open(fichier, "w", encoding="utf-8") as f:
-        json.dump(_serialiser_params(p), f, ensure_ascii=False, indent=2)
+        f.write(contenu)
+    if local_only or not github_sync.is_enabled():
+        return
+    # Hash check rapide en session pour ne pas re-pousser un contenu
+    # deja synchronise lors de la session courante.
+    new_hash = hashlib.md5(contenu.encode("utf-8")).hexdigest()
+    hash_key = f"_last_pushed_hash::{nom}"
+    if st.session_state.get(hash_key) == new_hash:
+        return
+    ok, msg = github_sync.push_file(
+        f"plans/{nom}.json", contenu, f"Sauvegarde plan: {nom}"
+    )
+    if ok:
+        st.session_state[hash_key] = new_hash
+    else:
+        try:
+            st.toast(f"Sauvegarde locale OK, GitHub KO : {msg}", icon="⚠️")
+        except Exception:
+            pass
 
 
 def charger_plan(nom):
@@ -57,25 +110,48 @@ def charger_plan(nom):
 
 
 def lister_plans():
-    """Liste les noms des plans sauvegardes."""
+    """Liste les noms des plans sauvegardes (sync GitHub au premier appel)."""
+    _sync_plans_from_github_once()
     return sorted(f.stem for f in PLANS_DIR.glob("*.json"))
 
 
 def renommer_plan(ancien_nom, nouveau_nom):
-    """Renomme un plan sauvegarde."""
+    """Renomme un plan localement et sur GitHub."""
     ancien = PLANS_DIR / f"{ancien_nom}.json"
     nouveau = PLANS_DIR / f"{nouveau_nom}.json"
-    if ancien.exists() and not nouveau.exists():
-        ancien.rename(nouveau)
-        return True
-    return False
+    if not (ancien.exists() and not nouveau.exists()):
+        return False
+    contenu = ancien.read_text(encoding="utf-8")
+    ancien.rename(nouveau)
+    if github_sync.is_enabled():
+        ok, msg = github_sync.rename_file(
+            f"plans/{ancien_nom}.json",
+            f"plans/{nouveau_nom}.json",
+            contenu,
+            f"Renomme plan: {ancien_nom} -> {nouveau_nom}",
+        )
+        if not ok:
+            try:
+                st.toast(f"Renomme local OK, GitHub KO : {msg}", icon="⚠️")
+            except Exception:
+                pass
+    return True
 
 
 def supprimer_plan(nom):
-    """Supprime un plan sauvegarde."""
+    """Supprime un plan localement et sur GitHub."""
     fichier = PLANS_DIR / f"{nom}.json"
     if fichier.exists():
         fichier.unlink()
+    if github_sync.is_enabled():
+        ok, msg = github_sync.delete_file(
+            f"plans/{nom}.json", f"Suppression plan: {nom}"
+        )
+        if not ok:
+            try:
+                st.toast(f"Supprime local OK, GitHub KO : {msg}", icon="⚠️")
+            except Exception:
+                pass
 
 st.set_page_config(
     page_title="Plan Financier Hotel 5*",
@@ -5834,10 +5910,45 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                    f"Projection : **{p['nb_mois_projection']//12} ans**")
 
         # ════════════════════════════════════════════════════════════════════
+        # SOMMAIRE (TOC) - Navigation rapide entre sections
+        # ════════════════════════════════════════════════════════════════════
+        if not print_mode:
+            _toc_sections = [
+                ("sec-1", "1. Montage financier", "#4facfe"),
+                ("sec-2", "2. Capital social", "#4facfe"),
+                ("sec-3", "3. Injection par acteur", "#4facfe"),
+                ("sec-4", "4. Investissements", "#4facfe"),
+                ("sec-5", "5. Moyens & Besoins", "#4facfe"),
+                ("sec-6", "6. Plan Rocher", "#11998e"),
+                ("sec-7", "7. Plan Chateau", "#f5576c"),
+                ("sec-8", "8. Simulation", "#764ba2"),
+            ]
+            _toc_links = "".join(
+                f'<a href="#{aid}" style="display:inline-block; padding:6px 12px; '
+                f'margin:3px 4px; background:{clr}15; color:{clr}; border:1px solid {clr}50; '
+                f'border-radius:6px; text-decoration:none; font-size:0.85em; font-weight:600; '
+                f'transition:all 0.2s;" '
+                f'onmouseover="this.style.background=\'{clr}\';this.style.color=\'white\';" '
+                f'onmouseout="this.style.background=\'{clr}15\';this.style.color=\'{clr}\';">'
+                f'{lbl}</a>'
+                for aid, lbl, clr in _toc_sections
+            )
+            st.markdown(
+                f'<div style="position:sticky; top:55px; z-index:100; background:white; '
+                f'padding:10px 14px; margin:8px 0 16px 0; border-radius:10px; '
+                f'box-shadow:0 2px 8px rgba(0,0,0,0.08); border:1px solid #e5e7eb;">'
+                f'<div style="font-size:0.75em; font-weight:700; color:#6b7280; '
+                f'text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Sommaire</div>'
+                f'<div>{_toc_links}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        # ════════════════════════════════════════════════════════════════════
         # 2. MONTAGE FINANCIER
         # ════════════════════════════════════════════════════════════════════
         _cmt("before_s1_montage")
-        st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
+        st.markdown('<h2 id="sec-1" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
                     '1. Montage financier</h2>', unsafe_allow_html=True)
 
         _prets_ro_std = [pr for pr in prets_ro if not pr.get("subside_rw")]
@@ -6069,7 +6180,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
 
         # 2. Repartition du capital social
         _cmt("before_s2_capital")
-        st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
+        st.markdown('<h2 id="sec-2" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
                     '2. Repartition du capital social</h2>', unsafe_allow_html=True)
 
         _c_cap1, _c_cap2 = st.columns(2)
@@ -6117,7 +6228,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
 
         # 3. Injection par acteur
         _cmt("before_s3_injection")
-        st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
+        st.markdown('<h2 id="sec-3" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
                     '3. Injection par acteur</h2>', unsafe_allow_html=True)
         st.caption("Recap des montants finances par acteur externe (hors Immobiliere Rocher et Chateau d'Argenteau)")
 
@@ -6176,7 +6287,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 4. INVESTISSEMENTS INITIAUX
         # ════════════════════════════════════════════════════════════════════
         _pret_rocher_ch = next((pr for pr in prets_ch if "rocher" in pr.get("nom","").lower()), None)
-        st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
+        st.markdown('<h2 id="sec-4" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
                     '4. Investissements initiaux</h2>', unsafe_allow_html=True)
 
         # Regrouper investissements Rocher + Chateau
@@ -6212,7 +6323,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 7. MOYENS & BESOINS
         # ════════════════════════════════════════════════════════════════════
         _cmt("before_s6_moyens_besoins")
-        st.markdown('<h2 style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px;">'
+        st.markdown('<h2 id="sec-5" style="border-bottom:3px solid #4facfe; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
                     '5. Moyens &amp; Besoins</h2>', unsafe_allow_html=True)
 
         # Donnees Chateau
@@ -6303,7 +6414,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # 7. PLAN FINANCIER ROCHER
         # ════════════════════════════════════════════════════════════════════
         _cmt("before_s7_rocher")
-        st.markdown('<h2 style="border-bottom:3px solid #11998e; padding-bottom:8px; margin-top:30px;">'
+        st.markdown('<h2 id="sec-6" style="border-bottom:3px solid #11998e; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
                     '6. Plan financier &mdash; Immobiliere Rocher</h2>', unsafe_allow_html=True)
 
         # Commentaire editable — synthese Rocher
@@ -6331,7 +6442,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             )
             if _new_comment_ro != p.get(_comment_key_ro):
                 p[_comment_key_ro] = _new_comment_ro
-                sauvegarder_plan(plan_nom, p)
+                sauvegarder_plan(plan_nom, p, local_only=True)
 
         # Hypotheses Rocher
         _cmt("before_ro_hypotheses")
@@ -6447,7 +6558,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # ════════════════════════════════════════════════════════════════════
         # 5. PLAN FINANCIER CHATEAU
         # ════════════════════════════════════════════════════════════════════
-        st.markdown('<h2 style="border-bottom:3px solid #f5576c; padding-bottom:8px; margin-top:30px;">'
+        st.markdown('<h2 id="sec-7" style="border-bottom:3px solid #f5576c; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
                     "7. Plan financier &mdash; Chateau d'Argenteau</h2>", unsafe_allow_html=True)
 
         # Donnees pour commentaire et hypotheses
@@ -6507,7 +6618,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             )
             if _new_comment_ch != p.get(_comment_key_ch):
                 p[_comment_key_ch] = _new_comment_ch
-                sauvegarder_plan(plan_nom, p)
+                sauvegarder_plan(plan_nom, p, local_only=True)
 
         # Marge par service
         st.markdown("### Marge par service")
@@ -6713,15 +6824,15 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         _ann["marge_resto"] = _ann.get("ca_loyer_restaurant", 0)
         _marge_services_hyp = [("marge_heberg","Hebergement","#667eea"),("marge_brass","Brasserie","#f5576c"),
             ("marge_bar","Bar","#ffcc00"),("marge_spa","Spa","#11998e"),("marge_salles","Salles","#a0522d"),
-            ("marge_resto","Location resto.","#ff8c00"),("subside_rw","Subside RW","#f093fb")]
+            ("marge_resto","Location resto.","#ff8c00")]
         for col, lbl, clr in _marge_services_hyp:
             fig.add_trace(go.Bar(x=_x, y=K(_ann[col]), name=lbl, marker_color=clr))
-        _marge_tot_hyp = K(_ann["marge"] + _ann["subside_rw"])
+        _marge_tot_hyp = K(_ann["marge"])
         _max_mh = max(_marge_tot_hyp) if len(_marge_tot_hyp) > 0 else 1
         fig.add_trace(go.Scatter(x=_x, y=[v + _max_mh * 0.04 for v in _marge_tot_hyp], mode="text",
             text=[f"<b>{v:,.0f}</b>" for v in _marge_tot_hyp], textposition="top center",
             textfont=dict(size=12, color="#1a1a6e"), showlegend=False, hoverinfo="skip", cliponaxis=False))
-        fig.update_layout(title="Marge par service + Subside (K\u20ac)", height=500, barmode="stack",
+        fig.update_layout(title="Marge par service (K\u20ac)", height=500, barmode="stack",
             xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f", range=[0, _max_mh * 1.5]), legend=_leg)
         _show_fig(fig, key="ch_marge_hyp")
 
@@ -6856,15 +6967,17 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         # ── Resultats ──
         st.markdown("### Resultats")
 
-        # EBITDA / Amort / Interets en batonnets groupes + Resultat Net en ligne
+        # EBITDA / Amort / Interets / Subside RW en batonnets groupes + Resultat Net en ligne
         _ebitda_k = K(_ann["ebitda"])
         _amort_k = K(_ann["amortissement"])
         _int_k = K(_ann["dette_interets"])
+        _sub_k = K(_ann["subside_rw"])
         _rn_k = K(_ann["resultat_net"])
         fig = go.Figure()
         fig.add_trace(go.Bar(x=_x, y=_ebitda_k, name="EBITDA", marker_color="#11998e"))
         fig.add_trace(go.Bar(x=_x, y=-_amort_k, name="Amortissement", marker_color="#764ba2"))
         fig.add_trace(go.Bar(x=_x, y=-_int_k, name="Interets", marker_color="#ffcc00"))
+        fig.add_trace(go.Bar(x=_x, y=_sub_k, name="Subsides RW", marker_color="#f093fb"))
         # Labels EBITDA au dessus des barres
         fig.add_trace(go.Scatter(x=_x, y=_ebitda_k, mode="text",
             text=[f"<b>{v:,.0f}</b>" for v in _ebitda_k], textposition="top center",
@@ -6974,6 +7087,165 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             xaxis=dict(type="category"), yaxis=dict(range=[0, 105], tickformat=".0f"))
         _show_fig(fig, key="ch_solvabilite")
 
+        # ════════════════════════════════════════════════════════════════════
+        # 8. SIMULATION (curseurs interactifs)
+        # ════════════════════════════════════════════════════════════════════
+        if not print_mode:
+            st.markdown('<h2 id="sec-8" style="border-bottom:3px solid #764ba2; padding-bottom:8px; margin-top:30px; scroll-margin-top:80px;">'
+                        '8. Simulation</h2>', unsafe_allow_html=True)
+            st.caption("Faites varier les hypotheses cles et observez l'impact en temps reel sur l'EBITDA, "
+                       "le Resultat Net et la tresorerie. Les variations s'appliquent sur **toute la projection**, "
+                       "sauf les taux d'occupation qui se reglent par annee.")
+
+            _sim_keys = [
+                "sim_cfdh", "sim_prix_heb",
+                "sim_occ_heb_0", "sim_occ_heb_1", "sim_occ_heb_2", "sim_occ_heb_3",
+                "sim_occ_brass_0", "sim_occ_brass_1", "sim_occ_brass_2", "sim_occ_brass_3",
+                "sim_prix_brass", "sim_marge_brass",
+                "sim_cf_ind",
+            ]
+            if st.button("\U0001F504 Reinitialiser tous les curseurs", key="sim_reset"):
+                for _k in _sim_keys:
+                    st.session_state.pop(_k, None)
+                st.rerun()
+
+            sc1, sc2, sc3 = st.columns(3)
+            with sc1:
+                st.markdown("**\U0001F3E8 Hebergement**")
+                d_cf_dir_heb = st.slider("Frais fixes directs (%)", -50, 100, 0, 5, key="sim_cfdh",
+                                         help="Variation appliquee aux frais fixes directs hebergement (linge, accueil, amenities...).")
+                d_prix_heb = st.slider("Prix moyen (%)", -30, 50, 0, 1, key="sim_prix_heb",
+                                       help="Variation des prix de tous les segments hebergement.")
+                st.markdown("*Taux d'occupation par annee (pts)*")
+                _occ_labels = ["An 1", "An 2", "An 3", "Croisiere (an 4+)"]
+                d_occ_heb = []
+                for i, lbl in enumerate(_occ_labels):
+                    d_occ_heb.append(st.slider(lbl, -20, 20, 0, 1, key=f"sim_occ_heb_{i}",
+                                               help=f"Points de pourcentage ajoutes au taux d'occupation {lbl}."))
+            with sc2:
+                st.markdown("**\U0001F37D Brasserie**")
+                d_prix_brass = st.slider("Prix (%)", -30, 50, 0, 1, key="sim_prix_brass",
+                                         help="Variation des prix souper/diner/midi/soir.")
+                d_marge_brass = st.slider("Marge (pts)", -20, 20, 0, 1, key="sim_marge_brass",
+                                          help="Reduction du % de couts variables (food cost). +5 pts de marge = -5 pts de food cost.")
+                st.markdown("*Taux d'occupation brasserie par annee (pts)*")
+                d_occ_brass = []
+                for i, lbl in enumerate(_occ_labels):
+                    d_occ_brass.append(st.slider(lbl, -20, 20, 0, 1, key=f"sim_occ_brass_{i}",
+                                                 help=f"Points de pourcentage ajoutes au taux d'occupation brasserie {lbl}."))
+            with sc3:
+                st.markdown("**\U0001F4CA General**")
+                d_cf_ind = st.slider("Frais fixes indirects (%)", -50, 100, 0, 5, key="sim_cf_ind",
+                                     help="Variation appliquee au personnel indirect ET aux charges fixes indirectes (loyer exclu).")
+
+            # ── Construction des params modifies ──
+            p_sim = copy.deepcopy(p)
+            # Hebergement
+            for _k in list(p_sim.get("cf_directs_hebergement", {}).keys()):
+                p_sim["cf_directs_hebergement"][_k] *= (1 + d_cf_dir_heb / 100)
+            for _i in range(min(4, len(p_sim.get("taux_occ", [])))):
+                p_sim["taux_occ"][_i] = max(0.0, min(1.0, p_sim["taux_occ"][_i] + d_occ_heb[_i] / 100))
+            for _seg in p_sim.get("segments", {}).values():
+                _seg["prix"] = _seg.get("prix", 0) * (1 + d_prix_heb / 100)
+            # Brasserie
+            if "taux_occ_brasserie" in p_sim:
+                for _i in range(min(4, len(p_sim["taux_occ_brasserie"]))):
+                    p_sim["taux_occ_brasserie"][_i] = max(0.0, min(1.0,
+                        p_sim["taux_occ_brasserie"][_i] + d_occ_brass[_i] / 100))
+            for _kp in ("brasserie_prix_souper", "brasserie_prix_diner",
+                        "brasserie_prix_midi", "brasserie_prix_soir"):
+                if _kp in p_sim:
+                    p_sim[_kp] = p_sim[_kp] * (1 + d_prix_brass / 100)
+            if "cv_brasserie_pct" in p_sim:
+                p_sim["cv_brasserie_pct"] = max(0.0, p_sim["cv_brasserie_pct"] - d_marge_brass / 100)
+            # General : frais fixes indirects (personnel + charges fixes indirectes hors loyer)
+            _factor = 1 + d_cf_ind / 100
+            for _poste in p_sim.get("personnel_indirect", []):
+                _poste["cout_brut"] = _poste.get("cout_brut", 0) * _factor
+            if "charges_fixes_indirectes_par_annee" in p_sim:
+                p_sim["charges_fixes_indirectes_par_annee"] = {
+                    _k: [_v * _factor for _v in _vals]
+                    for _k, _vals in p_sim["charges_fixes_indirectes_par_annee"].items()
+                }
+            if "charges_fixes_indirectes" in p_sim:
+                p_sim["charges_fixes_indirectes"] = {
+                    _k: _v * _factor
+                    for _k, _v in p_sim["charges_fixes_indirectes"].items()
+                }
+
+            # ── Recalcul ──
+            try:
+                df_sim = projection_complete(p_sim)
+                ann_sim = df_sim.groupby("annee").agg({
+                    "ebitda": "sum", "resultat_net": "sum",
+                    "cash_flow": "sum", "cash_flow_cumul": "last",
+                }).reset_index()
+
+                # Reference (params actuels)
+                ann_ref_eb = list(_ann["ebitda"].values)
+                ann_ref_rn = list(_ann["resultat_net"].values)
+                surplus_sim = (p_sim.get("fonds_propres_initial", 0)
+                              + sum(pr["montant"] for pr in p_sim.get("prets", []))
+                              - sum(inv["montant"] for inv in p_sim.get("investissements", [])))
+                surplus_ref = (fp_ch + sum(pr["montant"] for pr in prets_ch)
+                              - sum(inv["montant"] for inv in p["investissements"]))
+                ann_ref_treso = [v + surplus_ref for v in _ann["cash_flow_cumul"].values]
+                ann_sim_treso = [v + surplus_sim for v in ann_sim["cash_flow_cumul"].values]
+
+                _x_sim = [str(int(a)) for a in ann_sim["annee"]]
+
+                # ── KPIs deltas (annee de croisiere = derniere) ──
+                _last = -1
+                _delta_eb = (ann_sim["ebitda"].iloc[_last] - ann_ref_eb[_last]) / 1000
+                _delta_rn = (ann_sim["resultat_net"].iloc[_last] - ann_ref_rn[_last]) / 1000
+                _delta_tr = (ann_sim_treso[_last] - ann_ref_treso[_last]) / 1000
+                _kpi_card = (lambda v, lbl, clr: (
+                    f'<div style="background:linear-gradient(135deg,{clr}15,{clr}30); '
+                    f'padding:14px; border-radius:10px; text-align:center; border:1px solid {clr}50;">'
+                    f'<div style="font-size:1.5em; font-weight:700; color:{clr};">{v:+,.0f} K€</div>'
+                    f'<div style="font-size:0.8em; color:#555;">{lbl} (an final)</div></div>'
+                ))
+                k1, k2, k3 = st.columns(3)
+                with k1:
+                    st.markdown(_kpi_card(_delta_eb, "EBITDA",
+                        "#11998e" if _delta_eb >= 0 else "#dc2626"), unsafe_allow_html=True)
+                with k2:
+                    st.markdown(_kpi_card(_delta_rn, "Resultat Net",
+                        "#11998e" if _delta_rn >= 0 else "#dc2626"), unsafe_allow_html=True)
+                with k3:
+                    st.markdown(_kpi_card(_delta_tr, "Tresorerie cumulee",
+                        "#11998e" if _delta_tr >= 0 else "#dc2626"), unsafe_allow_html=True)
+
+                # ── Graphiques comparatifs ──
+                def _comp_chart(title, ref_vals, sim_vals, color_sim, suffix=""):
+                    f = go.Figure()
+                    f.add_trace(go.Scatter(x=_x_sim, y=[v/1000 for v in ref_vals],
+                        name="Reference", mode="lines+markers",
+                        line=dict(color="#9ca3af", width=2, dash="dot")))
+                    f.add_trace(go.Scatter(x=_x_sim, y=[v/1000 for v in sim_vals],
+                        name="Simulation", mode="lines+markers+text",
+                        line=dict(color=color_sim, width=3),
+                        text=[f"<b>{v/1000:,.0f}</b>" for v in sim_vals],
+                        textposition="top center", textfont=dict(size=10, color=color_sim)))
+                    f.add_hline(y=0, line_dash="dot", line_color="gray")
+                    f.update_layout(title=f"{title} (K€){suffix}", height=350,
+                        xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f"),
+                        legend=_leg, margin=dict(l=50, r=30, t=40, b=40))
+                    return f
+
+                st.plotly_chart(
+                    _comp_chart("EBITDA", ann_ref_eb, list(ann_sim["ebitda"].values), "#11998e"),
+                    use_container_width=True, key="sim_ebitda")
+                st.plotly_chart(
+                    _comp_chart("Resultat Net", ann_ref_rn, list(ann_sim["resultat_net"].values), "#f5576c"),
+                    use_container_width=True, key="sim_rn")
+                st.plotly_chart(
+                    _comp_chart("Tresorerie cumulee", ann_ref_treso, ann_sim_treso, "#4facfe",
+                                suffix=" — incl. surplus depart"),
+                    use_container_width=True, key="sim_treso")
+            except Exception as _e_sim:
+                st.error(f"Erreur lors du recalcul de la simulation : {_e_sim}")
+
         _cmt("before_conclusion")
         st.markdown('<div style="margin-top:30px; border-top:2px solid #dee2e6; padding-top:12px; '
                     'text-align:center; color:#888; font-size:0.9em;">'
@@ -6989,11 +7261,15 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
 def _auto_save(p, plan_name):
-    """Sauvegarde automatique si un plan est actif."""
+    """
+    Sauvegarde automatique en local seulement (pas de push GitHub).
+    Le push GitHub est reserve aux sauvegardes explicites pour ne pas
+    polluer l'historique avec les rerun Streamlit.
+    """
     if st.session_state.get("auth_mode") == "visu":
         return  # Pas de sauvegarde en mode lecture
     if plan_name and plan_name != "Defaut":
-        sauvegarder_plan(plan_name, p)
+        sauvegarder_plan(plan_name, p, local_only=True)
         st.session_state["_last_autosave"] = True
 
 
@@ -7136,7 +7412,19 @@ def main():
     # ─── Affichage rapport plein ecran ──────────────────────────────────
     if "_rapport_plan" in st.session_state:
         _rpt_nom = st.session_state["_rapport_plan"]
-        c_back, c_dl = st.columns([1, 1])
+        c_back, c_save_gh, c_dl, c_html = st.columns([1, 1.2, 1, 1.2])
+        with c_save_gh:
+            _save_disabled = st.session_state.get("auth_mode") == "visu"
+            if st.button("\U0001F4BE Sauvegarder sur GitHub",
+                         key="btn_save_gh_rpt", use_container_width=True,
+                         disabled=_save_disabled,
+                         help="Pousse les commentaires et modifications du rapport sur GitHub."):
+                try:
+                    _p_to_save = charger_plan(_rpt_nom)
+                    sauvegarder_plan(_rpt_nom, _p_to_save)
+                    st.toast(f"Plan « {_rpt_nom} » sauvegarde sur GitHub")
+                except Exception as _e_sv:
+                    st.toast(f"Erreur sauvegarde : {_e_sv}", icon="⚠️")
         with c_back:
             if st.button("\u2B05 Retour a l'accueil", key="close_rapport_top"):
                 st.session_state.pop("_rapport_plan", None)
@@ -7145,6 +7433,24 @@ def main():
             if st.button("\U0001F4E5 Version PDF", key="btn_pdf_mode", use_container_width=True):
                 st.session_state["_rapport_print"] = True
                 st.rerun()
+        with c_html:
+            try:
+                from html_export import build_rapport_html as _build_html_rpt
+                _p_for_export = charger_plan(_rpt_nom)
+                _html_bytes = _build_html_rpt(_rpt_nom, _p_for_export).encode("utf-8")
+                st.download_button(
+                    "\U0001F4C4 Export HTML interactif",
+                    data=_html_bytes,
+                    file_name=f"rapport_{_rpt_nom.replace(' ', '_')}.html",
+                    mime="text/html",
+                    key="btn_html_export",
+                    use_container_width=True,
+                    help="Telecharge un rapport HTML autonome avec graphiques interactifs.",
+                )
+            except Exception as _e_html:
+                st.button("\U0001F4C4 Export HTML (erreur)",
+                          key="btn_html_err", use_container_width=True, disabled=True,
+                          help=f"Erreur : {_e_html}")
 
         _is_print = st.session_state.get("_rapport_print", False)
         if _is_print:
@@ -7506,6 +7812,21 @@ def main():
         if _photo_2.exists():
             st.image(str(_photo_2), use_container_width=True)
 
+    if github_sync.is_enabled():
+        st.caption(
+            "<div style='text-align:center; color:#11998e; font-size:0.8rem;'>"
+            "\U0001F7E2 Persistance GitHub active &mdash; vos sauvegardes sont conservees apres redemarrage."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption(
+            "<div style='text-align:center; color:#999; font-size:0.8rem;'>"
+            "\U0001F7E0 Mode local &mdash; sauvegardes uniquement sur la machine actuelle."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
     # ─── Onglets principaux ───────────────────────────────────────────────
     tab0, tab_indic, tab_methodo = st.tabs([
         "\U0001F4DD Hypotheses",
@@ -7649,11 +7970,10 @@ def main():
                 ("cf_directs_evenements","Evenements","#a0522d"),
             ], "cfd", show_totals=True, total_col="cf_directs_total")
 
-            _proj_chart("Marge par service + Subside", [
+            _proj_chart("Marge par service", [
                 ("marge_heberg","Hebergement","#667eea"),("marge_brass","Brasserie","#f5576c"),
                 ("marge_bar","Bar","#ffcc00"),("marge_spa","Spa","#11998e"),
                 ("marge_salles","Salles","#a0522d"),("marge_resto","Location resto.","#ff8c00"),
-                ("subside_rw","Subside RW","#f093fb"),
             ], "marge_svc")
 
             st.markdown("### Compte de resultat")
