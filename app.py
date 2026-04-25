@@ -5838,6 +5838,31 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         all_figs = []  # Pour export PDF
 
         # ════════════════════════════════════════════════════════════════════
+        # Scroll-to-top a l'ouverture (efface le hash residuel) + ancre haut
+        # ════════════════════════════════════════════════════════════════════
+        if not print_mode:
+            import streamlit.components.v1 as _scroll_top_comp
+            _scroll_top_comp.html(
+                """<script>
+                // Au chargement, scroller en haut et nettoyer le hash residuel
+                // pour ne pas retomber sur la derniere section visitee.
+                (function() {
+                    try {
+                        if (window.parent.location.hash) {
+                            window.parent.history.replaceState(null, '',
+                                window.parent.location.pathname + window.parent.location.search);
+                        }
+                    } catch(e) {}
+                    try { window.parent.scrollTo({top: 0, behavior: 'instant'}); } catch(e) {}
+                    try { window.top.scrollTo({top: 0, behavior: 'instant'}); } catch(e) {}
+                })();
+                </script>""",
+                height=0,
+            )
+            # Ancre native Streamlit "top" pour le bouton de retour en haut
+            st.header(" ", anchor="rapport-top", divider=False)
+
+        # ════════════════════════════════════════════════════════════════════
         # 1. PAGE DE GARDE
         # ════════════════════════════════════════════════════════════════════
         # Page de garde
@@ -5942,6 +5967,22 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                 f'text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Sommaire</div>'
                 f'<div>{_toc_links}</div>'
                 f'</div>',
+                unsafe_allow_html=True,
+            )
+            # Bouton flottant "Haut" - position:fixed via CSS pour rester visible
+            # quel que soit le scroll. Pointe vers l'ancre native rapport-top.
+            st.markdown(
+                '<a href="#rapport-top" title="Retour en haut" '
+                'style="position:fixed; bottom:30px; right:30px; '
+                'width:48px; height:48px; background:#4f46e5; color:white; '
+                'border-radius:50%; text-decoration:none; '
+                'display:flex; align-items:center; justify-content:center; '
+                'font-size:1.4em; font-weight:bold; '
+                'box-shadow:0 4px 12px rgba(0,0,0,0.2); z-index:9999; '
+                'transition:all 0.2s;" '
+                'onmouseover="this.style.background=\'#3730a3\';this.style.transform=\'scale(1.1)\';" '
+                'onmouseout="this.style.background=\'#4f46e5\';this.style.transform=\'scale(1)\';">'
+                '↑</a>',
                 unsafe_allow_html=True,
             )
 
