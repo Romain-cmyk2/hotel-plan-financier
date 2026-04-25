@@ -5937,30 +5937,49 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                     if st.button(_lbl, key=f"toc_btn_{_aid}", use_container_width=True):
                         st.session_state["_scroll_to_section"] = _aid
 
-            # Si une section est en attente de scroll, injecter le script JS.
-            # Le script tente plusieurs niveaux d'iframe (Streamlit Cloud peut
-            # avoir une hierarchie iframe > components iframe).
+            # Si une section est en attente de scroll, injecter un script qui
+            # tente plusieurs strategies en cascade et affiche un message
+            # de diagnostic si rien ne fonctionne.
             if "_scroll_to_section" in st.session_state:
                 _scroll_target = st.session_state.pop("_scroll_to_section")
                 import streamlit.components.v1 as _scroll_comp
                 _scroll_comp.html(
                     f"""<script>
-                    setTimeout(function() {{
+                    (function() {{
                         const id = '{_scroll_target}';
-                        const docs = [];
-                        try {{ docs.push(window.top.document); }} catch(e) {{}}
-                        try {{ docs.push(window.parent.document); }} catch(e) {{}}
-                        docs.push(document);
-                        for (const doc of docs) {{
+                        function tryScroll() {{
+                            // Strategie 1: changer le hash du top (force le scroll natif)
                             try {{
-                                const el = doc.getElementById(id);
-                                if (el) {{
-                                    el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
-                                    return;
-                                }}
+                                window.top.location.hash = id;
                             }} catch(e) {{}}
+                            try {{
+                                window.parent.location.hash = id;
+                            }} catch(e) {{}}
+                            // Strategie 2: scrollIntoView a tous les niveaux
+                            const docs = [];
+                            try {{ docs.push(window.top.document); }} catch(e) {{}}
+                            try {{ docs.push(window.parent.document); }} catch(e) {{}}
+                            docs.push(document);
+                            for (const doc of docs) {{
+                                try {{
+                                    const el = doc.getElementById(id);
+                                    if (el) {{
+                                        el.scrollIntoView({{behavior: 'smooth', block: 'start'}});
+                                        return true;
+                                    }}
+                                }} catch(e) {{}}
+                            }}
+                            return false;
                         }}
-                    }}, 200);
+                        // Essayer plusieurs fois car le DOM peut etre en cours de rendu
+                        let attempts = 0;
+                        const interval = setInterval(function() {{
+                            attempts++;
+                            if (tryScroll() || attempts > 10) {{
+                                clearInterval(interval);
+                            }}
+                        }}, 100);
+                    }})();
                     </script>""",
                     height=0,
                 )
