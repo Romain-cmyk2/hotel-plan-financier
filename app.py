@@ -6615,8 +6615,12 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         fig.update_layout(title="Rocher — Cash flow (K\u20ac)", height=500, xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f"), legend=_leg)
         _show_fig(fig, key="ro_cashflow")
 
-        # Detail des chiffres - Rocher
-        st.markdown("### Details des chiffres")
+        # Detail des chiffres - Rocher (titre a la taille des titres Plotly)
+        st.markdown(
+            '<div style="font-size:17px; font-weight:700; color:#2a3f5f; '
+            'margin:16px 0 8px 0; font-family:Arial, sans-serif;">Details des chiffres</div>',
+            unsafe_allow_html=True,
+        )
         _fmt_ro = lambda v: f"{v:,.0f} €"
         _df_tbl_ro = pd.DataFrame({
             "Annee": [str(int(a)) for a in ann_ro["annee"]],
@@ -7134,8 +7138,12 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f"), legend=_leg)
         _show_fig(fig, key="ch_cashflow")
 
-        # Detail des chiffres - Chateau (vue d'ensemble annuelle)
-        st.markdown("### Details des chiffres")
+        # Detail des chiffres - Chateau (titre a la taille des titres Plotly)
+        st.markdown(
+            '<div style="font-size:17px; font-weight:700; color:#2a3f5f; '
+            'margin:16px 0 8px 0; font-family:Arial, sans-serif;">Details des chiffres</div>',
+            unsafe_allow_html=True,
+        )
         _fmt_ch = lambda v: f"{v:,.0f} €"
         _pct_ch = lambda num, den: f"{num/den*100:.1f}%" if den != 0 else "-"
         _df_tbl_ch = pd.DataFrame({
