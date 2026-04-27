@@ -613,6 +613,350 @@ def _section_rocher_table(ann_ro):
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Simulation interactive (JS)
+# ────────────────────────────────────────────────────────────────────────────
+
+def _section_simulation(p, ann):
+    """
+    Genere le HTML+JS de la section Simulation interactive.
+
+    Strategie : pre-calculer la projection baseline cote Python, stocker les
+    composantes principales (CA, CV, CF directs/indirects, amort, interets,
+    subside) annee par annee, et appliquer cote JS les effets des curseurs
+    sur les bonnes colonnes pour recalculer EBITDA/RN/Tresorerie.
+
+    Couvre les 13 curseurs de l'app Streamlit :
+    - Hebergement : CF directs (%), Prix moyen (%), Taux occ an1/an2/an3/croisiere (pts)
+    - Brasserie : Prix (%), Marge (pts), Taux occ par annee
+    - General : CF indirects (%)
+    """
+    import json as _json
+
+    # Calculer baseline avec les composantes detaillees
+    df = projection_complete(p)
+    base_ann = df.groupby("annee").agg({
+        "ca_hebergement": "sum",
+        "ca_brasserie": "sum",
+        "ca_bar": "sum",
+        "ca_spa": "sum",
+        "ca_salles": "sum",
+        "ca_loyer_restaurant": "sum",
+        "ca_divers": "sum",
+        "cv_hebergement": "sum",
+        "cv_brasserie": "sum",
+        "cv_bar": "sum",
+        "cv_spa": "sum",
+        "cf_directs_hebergement": "sum",
+        "cf_directs_brasserie": "sum",
+        "cf_directs_bar": "sum",
+        "cf_directs_spa": "sum",
+        "cf_directs_evenements": "sum",
+        "cf_indirects_total": "sum",
+        "amortissement": "sum",
+        "dette_interets": "sum",
+        "dette_capital": "sum",
+        "subside_rw": "sum",
+    }).reset_index()
+
+    # Construire les vecteurs JS
+    annees = [int(a) for a in base_ann["annee"]]
+    annee_ouverture = p["date_ouverture"].year
+    annee_idx_list = [a - annee_ouverture for a in annees]
+
+    def _vec(col):
+        return [float(v) for v in base_ann[col].values]
+
+    baseline = {
+        "annees": annees,
+        "annee_idx": annee_idx_list,
+        "ca_heberg": _vec("ca_hebergement"),
+        "ca_brass": _vec("ca_brasserie"),
+        "ca_bar": _vec("ca_bar"),
+        "ca_spa": _vec("ca_spa"),
+        "ca_salles": _vec("ca_salles"),
+        "ca_resto": _vec("ca_loyer_restaurant"),
+        "ca_divers": _vec("ca_divers"),
+        "cv_heberg": _vec("cv_hebergement"),
+        "cv_brass": _vec("cv_brasserie"),
+        "cv_bar": _vec("cv_bar"),
+        "cv_spa": _vec("cv_spa"),
+        "cf_directs_heberg": _vec("cf_directs_hebergement"),
+        "cf_directs_brass": _vec("cf_directs_brasserie"),
+        "cf_directs_bar": _vec("cf_directs_bar"),
+        "cf_directs_spa": _vec("cf_directs_spa"),
+        "cf_directs_events": _vec("cf_directs_evenements"),
+        "cf_indirects": _vec("cf_indirects_total"),
+        "amortissement": _vec("amortissement"),
+        "dette_interets": _vec("dette_interets"),
+        "dette_capital": _vec("dette_capital"),
+        "subside_rw": _vec("subside_rw"),
+    }
+    # Surplus initial (FP + dettes - investissements) pour calcul tresorerie
+    surplus_init = (p.get("fonds_propres_initial", 0)
+                    + sum(pr["montant"] for pr in p.get("prets", []))
+                    - sum(inv["montant"] for inv in p.get("investissements", [])))
+    baseline["surplus_init"] = surplus_init
+
+    baseline_json = _json.dumps(baseline)
+
+    # HTML de la section simulation
+    return f"""
+    <div class="info-box">
+        <b>Simulateur interactif</b> — Faites varier les hypotheses cles et observez
+        l'impact en temps reel sur l'EBITDA, le Resultat Net et la tresorerie.
+        Les variations s'appliquent sur toute la projection sauf les taux d'occupation
+        qui se reglent par annee (an 1, an 2, an 3, croisiere).
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin:16px 0;">
+        <div class="sim-col">
+            <h4>🏨 Hebergement</h4>
+            <label>Frais fixes directs : <span id="sim_cfdh_v">0</span>%</label>
+            <input type="range" min="-50" max="100" step="5" value="0" id="sim_cfdh"/>
+            <label>Prix moyen : <span id="sim_prix_heb_v">0</span>%</label>
+            <input type="range" min="-30" max="50" step="1" value="0" id="sim_prix_heb"/>
+            <p style="margin-top:8px; font-style:italic; font-size:0.85em;">Taux d'occupation par annee (pts) :</p>
+            <label>An 1 : <span id="sim_occ_heb_0_v">0</span></label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_occ_heb_0"/>
+            <label>An 2 : <span id="sim_occ_heb_1_v">0</span></label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_occ_heb_1"/>
+            <label>An 3 : <span id="sim_occ_heb_2_v">0</span></label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_occ_heb_2"/>
+            <label>Croisiere : <span id="sim_occ_heb_3_v">0</span></label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_occ_heb_3"/>
+        </div>
+        <div class="sim-col">
+            <h4>🍽 Brasserie</h4>
+            <label>Prix : <span id="sim_prix_brass_v">0</span>%</label>
+            <input type="range" min="-30" max="50" step="1" value="0" id="sim_prix_brass"/>
+            <label>Marge : <span id="sim_marge_brass_v">0</span> pts</label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_marge_brass"/>
+            <p style="margin-top:8px; font-style:italic; font-size:0.85em;">Taux d'occupation par annee (pts) :</p>
+            <label>An 1 : <span id="sim_occ_brass_0_v">0</span></label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_occ_brass_0"/>
+            <label>An 2 : <span id="sim_occ_brass_1_v">0</span></label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_occ_brass_1"/>
+            <label>An 3 : <span id="sim_occ_brass_2_v">0</span></label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_occ_brass_2"/>
+            <label>Croisiere : <span id="sim_occ_brass_3_v">0</span></label>
+            <input type="range" min="-20" max="20" step="1" value="0" id="sim_occ_brass_3"/>
+        </div>
+        <div class="sim-col">
+            <h4>📊 General</h4>
+            <label>Frais fixes indirects : <span id="sim_cf_ind_v">0</span>%</label>
+            <input type="range" min="-50" max="100" step="5" value="0" id="sim_cf_ind"/>
+            <button id="sim_reset_btn" style="margin-top:24px; padding:8px 16px;
+                background:#4f46e5; color:white; border:none; border-radius:6px;
+                cursor:pointer; font-weight:600;">🔄 Reinitialiser</button>
+        </div>
+    </div>
+
+    <div id="sim_kpis" class="kpi-row" style="margin:16px 0;"></div>
+
+    <div id="sim_chart_ebitda" style="margin:16px 0;"></div>
+    <div id="sim_chart_rn" style="margin:16px 0;"></div>
+    <div id="sim_chart_treso" style="margin:16px 0;"></div>
+
+    <script>
+    (function() {{
+        const baseline = {baseline_json};
+        const params = {{
+            taux_occ_base: {_json.dumps(p.get("taux_occ", [0.42, 0.5, 0.55, 0.6]))},
+            taux_occ_brass_base: {_json.dumps(p.get("taux_occ_brasserie", [0.42, 0.47, 0.525, 0.6]))},
+        }};
+
+        const SLIDERS = [
+            'sim_cfdh', 'sim_prix_heb',
+            'sim_occ_heb_0', 'sim_occ_heb_1', 'sim_occ_heb_2', 'sim_occ_heb_3',
+            'sim_prix_brass', 'sim_marge_brass',
+            'sim_occ_brass_0', 'sim_occ_brass_1', 'sim_occ_brass_2', 'sim_occ_brass_3',
+            'sim_cf_ind',
+        ];
+
+        function getDeltas() {{
+            const d = {{}};
+            for (const id of SLIDERS) {{
+                d[id] = parseFloat(document.getElementById(id).value);
+            }}
+            return d;
+        }}
+
+        function applyDeltasToYear(idx, d) {{
+            // idx = position dans les vecteurs annee (0, 1, 2, ...)
+            // annee_idx peut etre 0 (an 1), 1 (an 2), etc.
+            const annee_idx = baseline.annee_idx[idx];
+            // Selectionner le delta de taux d'occupation correspondant a l'annee
+            // an 1 => delta_0, an 2 => delta_1, an 3 => delta_2, croisiere (an 4+) => delta_3
+            const occ_idx = Math.min(annee_idx, 3);
+
+            // Hebergement
+            // - prix moyen %: multiplie ca_heberg
+            // - taux occ pts: ratio (taux_base + delta) / taux_base
+            const taux_base_heb = params.taux_occ_base[Math.min(annee_idx, params.taux_occ_base.length - 1)];
+            const taux_new_heb = Math.max(0.001, Math.min(1, taux_base_heb + d['sim_occ_heb_' + occ_idx] / 100));
+            const ratio_occ_heb = taux_new_heb / taux_base_heb;
+            const factor_heb = (1 + d['sim_prix_heb'] / 100) * ratio_occ_heb;
+            const ca_heberg = baseline.ca_heberg[idx] * factor_heb;
+            // CV hebergement (proportionnel aux nuitees, donc proportionnel au taux occ surtout)
+            const cv_heberg = baseline.cv_heberg[idx] * ratio_occ_heb;
+            // CF directs hebergement (curseur dedie)
+            const cf_directs_heberg = baseline.cf_directs_heberg[idx] * (1 + d['sim_cfdh'] / 100);
+
+            // Brasserie
+            const taux_base_br = params.taux_occ_brass_base[Math.min(annee_idx, params.taux_occ_brass_base.length - 1)];
+            const taux_new_br = Math.max(0.001, Math.min(1, taux_base_br + d['sim_occ_brass_' + occ_idx] / 100));
+            const ratio_occ_br = taux_new_br / taux_base_br;
+            const factor_br = (1 + d['sim_prix_brass'] / 100) * ratio_occ_br;
+            const ca_brass = baseline.ca_brass[idx] * factor_br;
+            // Marge brasserie (pts) : -delta_marge sur le ratio cv/ca
+            // Approximation : reduire cv en proportion
+            const ratio_cv_brass = baseline.ca_brass[idx] > 0
+                ? baseline.cv_brass[idx] / baseline.ca_brass[idx]
+                : 0.35;
+            const new_ratio_cv_brass = Math.max(0, ratio_cv_brass - d['sim_marge_brass'] / 100);
+            const cv_brass = ca_brass * new_ratio_cv_brass;
+
+            // Bar et Spa : variation taux occ (utilisent ratio_occ_heb car proportionnels aux nuitees)
+            const ca_bar = baseline.ca_bar[idx] * ratio_occ_heb;
+            const ca_spa = baseline.ca_spa[idx];  // spa moins lie au taux occ
+            const cv_bar = baseline.cv_bar[idx] * ratio_occ_heb;
+            const cv_spa = baseline.cv_spa[idx];
+
+            // Salles, resto, divers (pas de curseur direct)
+            const ca_salles = baseline.ca_salles[idx];
+            const ca_resto = baseline.ca_resto[idx];
+            const ca_divers = baseline.ca_divers[idx];
+
+            // CF directs autres : pas de curseur dedie (gardes constants)
+            const cf_directs_brass = baseline.cf_directs_brass[idx];
+            const cf_directs_bar = baseline.cf_directs_bar[idx];
+            const cf_directs_spa = baseline.cf_directs_spa[idx];
+            const cf_directs_events = baseline.cf_directs_events[idx];
+
+            // CF indirects (curseur general)
+            const cf_indirects = baseline.cf_indirects[idx] * (1 + d['sim_cf_ind'] / 100);
+
+            // Calculs derives
+            const ca_total = ca_heberg + ca_brass + ca_bar + ca_spa + ca_salles + ca_resto + ca_divers;
+            const cv_total = cv_heberg + cv_brass + cv_bar + cv_spa;
+            const cf_directs = cf_directs_heberg + cf_directs_brass + cf_directs_bar + cf_directs_spa + cf_directs_events;
+            const ebitda = ca_total - cv_total - cf_directs - cf_indirects;
+            const amort = baseline.amortissement[idx];
+            const interets = baseline.dette_interets[idx];
+            const subside = baseline.subside_rw[idx];
+            const rn = ebitda - amort - interets + subside;
+            // Cash flow = RN + amort - capital_paye (approximation, ignore TVA et BFR)
+            const cash_flow = rn + amort - baseline.dette_capital[idx];
+
+            return {{ ca_total, ebitda, rn, cash_flow }};
+        }}
+
+        function recompute() {{
+            const d = getDeltas();
+            // Mise a jour valeurs affichees
+            for (const id of SLIDERS) {{
+                document.getElementById(id + '_v').textContent =
+                    document.getElementById(id).value;
+            }}
+            // Calcul par annee
+            const n = baseline.annees.length;
+            const ebitda_sim = new Array(n);
+            const rn_sim = new Array(n);
+            const treso_sim = new Array(n);
+            const ebitda_ref = new Array(n);
+            const rn_ref = new Array(n);
+            const treso_ref = new Array(n);
+            let cash_cumul_sim = 0;
+            let cash_cumul_ref = 0;
+            for (let i = 0; i < n; i++) {{
+                const sim = applyDeltasToYear(i, d);
+                ebitda_sim[i] = sim.ebitda / 1000;
+                rn_sim[i] = sim.rn / 1000;
+                cash_cumul_sim += sim.cash_flow;
+                treso_sim[i] = (cash_cumul_sim + baseline.surplus_init) / 1000;
+
+                // Reference (curseurs a 0)
+                const refDeltas = {{}};
+                for (const id of SLIDERS) refDeltas[id] = 0;
+                const ref = applyDeltasToYear(i, refDeltas);
+                ebitda_ref[i] = ref.ebitda / 1000;
+                rn_ref[i] = ref.rn / 1000;
+                cash_cumul_ref += ref.cash_flow;
+                treso_ref[i] = (cash_cumul_ref + baseline.surplus_init) / 1000;
+            }}
+            // Mise a jour KPIs (annee finale)
+            const last = n - 1;
+            const dEb = ebitda_sim[last] - ebitda_ref[last];
+            const dRn = rn_sim[last] - rn_ref[last];
+            const dTr = treso_sim[last] - treso_ref[last];
+            const kpiHtml = function(v, lbl) {{
+                const clr = v >= 0 ? '#11998e' : '#dc2626';
+                const sign = v >= 0 ? '+' : '';
+                return `<div style="background:linear-gradient(135deg,${{clr}}15,${{clr}}30);
+                        padding:14px; border-radius:10px; text-align:center;
+                        border:1px solid ${{clr}}50; flex:1; min-width:160px;">
+                        <div style="font-size:1.5em; font-weight:700; color:${{clr}};">
+                            ${{sign}}${{v.toLocaleString('fr-FR', {{maximumFractionDigits:0}})}} K€</div>
+                        <div style="font-size:0.85em; color:#555;">${{lbl}} (an final)</div></div>`;
+            }};
+            document.getElementById('sim_kpis').innerHTML =
+                kpiHtml(dEb, 'EBITDA') + kpiHtml(dRn, 'Resultat Net') + kpiHtml(dTr, 'Tresorerie cumulee');
+
+            // Mise a jour graphes Plotly
+            const xs = baseline.annees.map(String);
+            const layoutCommon = {{
+                margin: {{l:50, r:30, t:50, b:40}},
+                xaxis: {{type: 'category'}},
+                yaxis: {{tickformat: ',.0f'}},
+                legend: {{orientation: 'h', y: -0.18, xanchor: 'center', x: 0.5}},
+                paper_bgcolor: 'white',
+                plot_bgcolor: '#fafafa',
+            }};
+            Plotly.react('sim_chart_ebitda', [
+                {{x:xs, y:ebitda_ref, name:'Reference', mode:'lines+markers',
+                  line:{{color:'#9ca3af', width:2, dash:'dot'}}}},
+                {{x:xs, y:ebitda_sim, name:'Simulation', mode:'lines+markers+text',
+                  line:{{color:'#11998e', width:3}},
+                  text: ebitda_sim.map(v => `<b>${{Math.round(v).toLocaleString('fr-FR')}}</b>`),
+                  textposition: 'top center', textfont: {{size:10, color:'#11998e'}}}},
+            ], Object.assign({{title:'EBITDA (K€)', height:350}}, layoutCommon));
+
+            Plotly.react('sim_chart_rn', [
+                {{x:xs, y:rn_ref, name:'Reference', mode:'lines+markers',
+                  line:{{color:'#9ca3af', width:2, dash:'dot'}}}},
+                {{x:xs, y:rn_sim, name:'Simulation', mode:'lines+markers+text',
+                  line:{{color:'#f5576c', width:3}},
+                  text: rn_sim.map(v => `<b>${{Math.round(v).toLocaleString('fr-FR')}}</b>`),
+                  textposition: 'top center', textfont: {{size:10, color:'#f5576c'}}}},
+            ], Object.assign({{title:'Resultat Net (K€)', height:350}}, layoutCommon));
+
+            Plotly.react('sim_chart_treso', [
+                {{x:xs, y:treso_ref, name:'Reference', mode:'lines+markers',
+                  line:{{color:'#9ca3af', width:2, dash:'dot'}}}},
+                {{x:xs, y:treso_sim, name:'Simulation', mode:'lines+markers+text',
+                  line:{{color:'#4facfe', width:3}},
+                  text: treso_sim.map(v => `<b>${{Math.round(v).toLocaleString('fr-FR')}}</b>`),
+                  textposition: 'top center', textfont: {{size:10, color:'#4facfe'}}}},
+            ], Object.assign({{title:'Tresorerie cumulee (K€) - incl. surplus depart', height:350}}, layoutCommon));
+        }}
+
+        // Evenements curseurs
+        for (const id of SLIDERS) {{
+            document.getElementById(id).addEventListener('input', recompute);
+        }}
+        document.getElementById('sim_reset_btn').addEventListener('click', function() {{
+            for (const id of SLIDERS) document.getElementById(id).value = 0;
+            recompute();
+        }});
+
+        // Initialisation
+        recompute();
+    }})();
+    </script>
+    """
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Assemblage final
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -640,6 +984,9 @@ def build_rapport_html(plan_nom, params):
     ann_ro, prets_ro_data, fp_ro_init = _compute_rocher(p)
     figs_ro = _build_rocher_charts(p, ann_ro, prets_ro_data, fp_ro_init)
     rocher_table_html = _section_rocher_table(ann_ro)
+
+    # Donnees pour simulation interactive JS
+    sim_html = _section_simulation(p, ann)
 
     # ── KPIs ──
     rd = p.get("rocher_data", {})
@@ -719,7 +1066,16 @@ def build_rapport_html(plan_nom, params):
                     font-size: 0.9em; color: #1e3a5f; }
         .footer { margin-top: 40px; padding-top: 16px; border-top: 2px solid #dee2e6;
                   text-align: center; color: #888; font-size: 0.9em; }
-        @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+        .sim-col { background: #f9fafb; padding: 14px; border-radius: 10px;
+                   border: 1px solid #e5e7eb; }
+        .sim-col h4 { margin: 0 0 10px 0; color: #1f2937; }
+        .sim-col label { display: block; font-size: 0.85em; font-weight: 600;
+                         color: #4b5563; margin: 8px 0 2px 0; }
+        .sim-col input[type=range] { width: 100%; cursor: pointer; }
+        @media (max-width: 768px) {
+            .two-col { grid-template-columns: 1fr; }
+            div[style*="grid-template-columns: 1fr 1fr 1fr"] { grid-template-columns: 1fr !important; }
+        }
     </style>
     """
 
@@ -818,17 +1174,7 @@ def build_rapport_html(plan_nom, params):
     {_fig_html(figs['solvabilite'], 380)}
 
     <h2 id="sec-8" style="border-bottom-color:#a78bfa;">8. Simulation</h2>
-    <div class="info-box">
-        <b>Note :</b> la simulation interactive (curseurs pour faire varier hypothèses
-        et observer l'impact en temps réel sur EBITDA, Résultat Net et trésorerie)
-        est disponible uniquement dans l'application Streamlit.<br>
-        Les graphiques ci-dessous représentent l'état de référence (curseurs à zéro,
-        sans variation appliquée) pour les indicateurs clés.
-    </div>
-    <h3>EBITDA — Référence</h3>
-    {_fig_html(figs['ebitda_rn'], 380)}
-    <h3>Cash flow & Trésorerie — Référence</h3>
-    {_fig_html(figs['cashflow'], 380)}
+    {sim_html}
 
     <div class="footer">
         Rapport généré pour le plan <b>{plan_nom}</b>
