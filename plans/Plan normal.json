@@ -190,7 +190,7 @@
     {
       "poste": "Cuisinier",
       "etp": 6.0,
-      "cout_brut": 55000
+      "cout_brut": 50000
     },
     {
       "poste": "Serveurs",
@@ -258,15 +258,13 @@
     "salles": 0.1
   },
   "cf_directs_hebergement": {
-    "Linge / Blanchisserie (fixe)": 18000,
-    "Produits accueil (fixe)": 6000,
-    "Amenities & minibar": 8000
+    "Produits accueil (fixe)": 6000
   },
   "cf_directs_brasserie": {
     "Electricite": 20000
   },
   "cf_directs_bar": {
-    "Electricite": 4000
+    "Electricite": 8500
   },
   "cf_directs_spa": {
     "Entretien equipements spa": 8000,
