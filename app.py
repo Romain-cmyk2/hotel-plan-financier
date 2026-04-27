@@ -5691,6 +5691,10 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
                        "**Cash cumule** = Somme des cash periodes depuis le debut.",
         "ro_fp": "**FP initiaux** = Capital apporte par les actionnaires.\n\n"
                  "**Capitaux propres** = FP initiaux + Resultat net cumule.",
+        "ro_endettement": "**Endettement** = Capital restant du sur chaque emprunt a la fin de chaque annee.\n\n"
+                          "Ventile par pret. Pour les prets garantis par un subside RW, le capital "
+                          "est rembourse en totalite par le subside a la fin de la duree du pret "
+                          "(operation neutre au niveau du cash : perception du subside = remboursement de la dette).",
         "ch_ventes": "**Ventes par service** = CA Hebergement (nuitees x ADR) + CA Brasserie (couverts + PDJ) "
                      "+ CA Bar (nuitees x taux x prix) + CA Spa (soins + entrees) + CA Salles (seminaires + mariages).\n\n"
                      "Tous les CA sont ajustes par l'inflation annuelle.",
@@ -6590,6 +6594,39 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             textposition="top center", textfont=dict(size=11, color="#3b3b98")))
         fig.update_layout(title="Rocher — Fonds propres (K\u20ac)", height=500, xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f"), legend=_leg)
         _show_fig(fig, key="ro_fp")
+
+        # Endettement Rocher - ventile par pret
+        _enc_ro_by_pret = {}
+        for pr in prets_ro:
+            if pr["montant"] > 0:
+                _pn_ro = pr["nom"]
+                if pr.get("subside_rw"):
+                    _pn_ro += " (RW)"
+                _enc_ro_by_pret[_pn_ro] = []
+                _dfp_ro = calc_tableau_pret(pr, p["date_ouverture"], p["nb_mois_projection"])
+                for a in ann_ro["annee"]:
+                    _d_fin_ro = date(int(a), 12, 31)
+                    _r_ro = _dfp_ro[_dfp_ro["date"] <= _d_fin_ro]
+                    _enc_ro_by_pret[_pn_ro].append(
+                        _r_ro.iloc[-1]["capital_restant"] / 1000 if not _r_ro.empty else 0
+                    )
+        if _enc_ro_by_pret:
+            _enc_ro_colors = ["#f5576c", "#667eea", "#11998e", "#ffcc00", "#764ba2", "#a0522d", "#f093fb"]
+            fig = go.Figure()
+            for _ci, (_pn_ro, _vals_ro) in enumerate(_enc_ro_by_pret.items()):
+                fig.add_trace(go.Bar(x=xr, y=_vals_ro, name=_pn_ro,
+                    marker_color=_enc_ro_colors[_ci % len(_enc_ro_colors)]))
+            _enc_ro_total_k = [sum(v[i] for v in _enc_ro_by_pret.values()) for i in range(len(xr))]
+            fig.add_trace(go.Scatter(x=xr, y=_enc_ro_total_k, mode="markers+text",
+                text=[f"<b>{v:,.0f}</b>" for v in _enc_ro_total_k], textposition="top center",
+                textfont=dict(size=11, color="#1a1a6e"), marker=dict(size=1, color="rgba(0,0,0,0)"),
+                showlegend=False, hoverinfo="skip", cliponaxis=False))
+            fig.update_layout(title="Rocher - Evolution endettement (K€)", height=400, barmode="stack",
+                xaxis=dict(type="category"),
+                yaxis=dict(tickformat=",.0f",
+                           range=[0, max(_enc_ro_total_k) * 1.18] if _enc_ro_total_k else None),
+                legend=_leg)
+            _show_fig(fig, key="ro_endettement")
 
         # ════════════════════════════════════════════════════════════════════
         # 5. PLAN FINANCIER CHATEAU

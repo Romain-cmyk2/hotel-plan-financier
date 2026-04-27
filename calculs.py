@@ -1029,12 +1029,19 @@ def calc_amortissements_mensuels(params, d: date, date_ouverture: date):
 # ─── Tableau d'amortissement des prets ─────────────────────────────────────────
 
 def calc_tableau_pret(pret: dict, date_debut: date, nb_mois_max: int = 240):
-    """Genere le tableau d'amortissement d'un pret."""
+    """Genere le tableau d'amortissement d'un pret.
+
+    Pour les prets subside_rw=True : a la fin de la duree du pret, le subside
+    rembourse integralement le capital. On ajoute des lignes "ghost" apres la
+    duree du pret avec capital_restant=0 et capital=0/interets=0, pour que la
+    dette disparaisse dans les graphiques d'endettement sans impact cash.
+    """
     montant = pret["montant"]
     taux_mensuel = pret["taux_annuel"] / 12
     nb_mensualites = pret["duree_ans"] * 12
     differe = pret.get("differe_mois", 0)
     type_pret = pret.get("type", "annuite")
+    is_subside_rw = pret.get("subside_rw", False)
 
     if montant == 0 or nb_mensualites == 0:
         return pd.DataFrame()
@@ -1089,6 +1096,24 @@ def calc_tableau_pret(pret: dict, date_debut: date, nb_mois_max: int = 240):
 
             if capital_restant <= 0.01:
                 break
+
+    # Pour les prets subside_rw : apres la fin du pret, le subside a rembourse
+    # le capital. On ajoute des lignes "ghost" jusqu'a nb_mois_max avec
+    # capital_restant=0, interets=0, capital=0 (pas d'impact cash).
+    if is_subside_rw and rows:
+        last_d = rows[-1]["date"]
+        last_mois = rows[-1]["mois"]
+        remaining = nb_mois_max - len(rows)
+        for j in range(1, remaining + 1):
+            d = last_d + relativedelta(months=j)
+            rows.append({
+                "date": d,
+                "mois": last_mois + j,
+                "mensualite": 0,
+                "interets": 0,
+                "capital": 0,
+                "capital_restant": 0,
+            })
 
     return pd.DataFrame(rows)
 
