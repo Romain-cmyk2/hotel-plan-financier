@@ -413,6 +413,206 @@ def _section_pl(ann):
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Calculs et graphes Rocher (replique de app.py _module_rocher partiel)
+# ────────────────────────────────────────────────────────────────────────────
+
+def _compute_rocher(p):
+    """Calcule les flux annuels de l'Immobiliere Rocher.
+    Retourne (ann_ro, prets_ro, fp_ro, x_lbl)."""
+    import pandas as pd
+    from dateutil.relativedelta import relativedelta
+
+    rd = p.get("rocher_data", {})
+    fp_ro = rd.get("fonds_propres_initial", 0)
+    prets_ro = rd.get("prets", [])
+    loyer_m = p.get("loyer_mensuel", 0)
+    nb_mois = p["nb_mois_projection"]
+
+    # Pret du Chateau au Rocher : Rocher RECOIT les remboursements
+    pret_rocher_ch = next(
+        (pr for pr in p.get("prets", []) if "rocher" in pr.get("nom", "").lower()), None
+    )
+    df_pret_ch_ro = (
+        calc_tableau_pret(pret_rocher_ch, p["date_ouverture"], nb_mois)
+        if pret_rocher_ch else pd.DataFrame()
+    )
+
+    # Prets bancaires Rocher (charges)
+    dfs_ro = {
+        pr["nom"]: calc_tableau_pret(pr, p["date_ouverture"], nb_mois)
+        for pr in prets_ro if pr["montant"] > 0
+    }
+
+    # Amortissement annuel Rocher
+    amort_an_ro = sum(
+        inv["montant"] / inv["duree_amort"]
+        for inv in rd.get("investissements", [])
+        if inv.get("duree_amort", 0) > 0
+    )
+    amort_m_ro = amort_an_ro / 12
+
+    rows_ro = []
+    for m in range(nb_mois):
+        d = p["date_ouverture"] + relativedelta(months=m)
+        rev = loyer_m
+        int_rec = 0; cap_rec = 0
+        if not df_pret_ch_ro.empty:
+            r = df_pret_ch_ro[df_pret_ch_ro["date"] == d]
+            if not r.empty:
+                int_rec = r.iloc[0]["interets"]
+                cap_rec = r.iloc[0]["capital"]
+        int_pay = 0; cap_pay = 0
+        for _df in dfs_ro.values():
+            r = _df[_df["date"] == d]
+            if not r.empty:
+                int_pay += r.iloc[0]["interets"]
+                cap_pay += r.iloc[0]["capital"]
+        # Subside RW Rocher (15 ans, a partir de An 2)
+        annee_idx = m // 12
+        sub_rw = 0
+        if annee_idx >= 1:
+            for _pr in prets_ro:
+                if _pr.get("subside_rw"):
+                    duree_sub = 15
+                    if (annee_idx - 1) < duree_sub:
+                        sub_rw += _pr["montant"] / duree_sub / 12
+        resultat = rev + int_rec - int_pay - amort_m_ro + sub_rw
+        cash = rev + int_rec + cap_rec - int_pay - cap_pay
+        rows_ro.append({
+            "date": d, "annee": d.year,
+            "loyer": rev, "interets_recus": int_rec, "capital_recu": cap_rec,
+            "interets_payes": int_pay, "capital_paye": cap_pay,
+            "amortissement": amort_m_ro, "subside_rw": sub_rw,
+            "produits": rev + int_rec + sub_rw,
+            "charges": int_pay + amort_m_ro,
+            "resultat": resultat, "cash": cash,
+        })
+    df_ro = pd.DataFrame(rows_ro)
+    df_ro["cash_cumul"] = df_ro["cash"].cumsum()
+    df_ro["res_cumul"] = df_ro["resultat"].cumsum()
+    ann_ro = df_ro.groupby("annee").agg({
+        "loyer": "sum", "interets_recus": "sum", "capital_recu": "sum",
+        "interets_payes": "sum", "capital_paye": "sum",
+        "amortissement": "sum", "subside_rw": "sum",
+        "produits": "sum", "charges": "sum",
+        "resultat": "sum", "cash": "sum",
+        "cash_cumul": "last", "res_cumul": "last",
+    }).reset_index()
+    return ann_ro, prets_ro, fp_ro
+
+
+def _build_rocher_charts(p, ann_ro, prets_ro, fp_ro):
+    K = lambda v: [x / 1000 for x in v]
+    leg = dict(orientation="h", y=-0.18, xanchor="center", x=0.5)
+    figs = {}
+    xr = [str(int(a)) for a in ann_ro["annee"]]
+
+    # P&L Rocher
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=xr, y=K(ann_ro["produits"].values), name="Produits", marker_color="#38ef7d"))
+    fig.add_trace(go.Bar(x=xr, y=[-v for v in K(ann_ro["charges"].values)], name="Charges", marker_color="#f5576c"))
+    res_k = K(ann_ro["resultat"].values)
+    fig.add_trace(go.Scatter(x=xr, y=res_k, name="Resultat",
+                             mode="lines+markers+text", line=dict(color="#3b3b98", width=3),
+                             text=[f"<b>{v:,.0f}</b>" for v in res_k],
+                             textposition="top center", textfont=dict(size=11, color="#23408f")))
+    fig.add_hline(y=0, line_dash="dot", line_color="gray")
+    fig.update_layout(title="Rocher - P&L (K€)", barmode="group",
+                      xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f"), legend=leg)
+    figs["ro_pnl"] = fig
+
+    # Cash flow Rocher
+    fig = go.Figure()
+    cash_k = K(ann_ro["cash"].values)
+    cumul_k = K(ann_ro["cash_cumul"].values)
+    fig.add_trace(go.Bar(x=xr, y=cash_k, name="Cash periode", marker_color="#4facfe",
+                         text=[f"<b>{v:,.0f}</b>" for v in cash_k], textposition="outside",
+                         textfont=dict(size=10, color="#1a5e96")))
+    fig.add_trace(go.Scatter(x=xr, y=cumul_k, name="Cash cumule",
+                             mode="lines+markers+text", line=dict(color="#f5576c", width=3),
+                             text=[f"<b>{v:,.0f}</b>" for v in cumul_k],
+                             textposition="top center", textfont=dict(size=11, color="#b71c2e")))
+    fig.add_hline(y=0, line_dash="dot", line_color="gray")
+    fig.update_layout(title="Rocher - Cash flow (K€)", xaxis=dict(type="category"),
+                      yaxis=dict(tickformat=",.0f"), legend=leg)
+    figs["ro_cashflow"] = fig
+
+    # Fonds propres Rocher
+    fig = go.Figure()
+    cp_k = [(fp_ro + v) / 1000 for v in ann_ro["res_cumul"].values]
+    fig.add_trace(go.Scatter(x=xr, y=cp_k, name="Capitaux propres",
+                             mode="lines+markers+text", line=dict(color="#667eea", width=3),
+                             fill="tozeroy", fillcolor="rgba(102,126,234,0.15)",
+                             text=[f"<b>{v:,.0f}</b>" for v in cp_k],
+                             textposition="top center", textfont=dict(size=11, color="#3b3b98")))
+    fig.update_layout(title="Rocher - Fonds propres (K€)", xaxis=dict(type="category"),
+                      yaxis=dict(tickformat=",.0f"), legend=leg)
+    figs["ro_fp"] = fig
+
+    # Endettement Rocher
+    enc_by_pret = {}
+    from datetime import date as _date
+    for pr in prets_ro:
+        if pr["montant"] > 0:
+            nm = pr["nom"]
+            if pr.get("subside_rw"):
+                nm += " (RW)"
+            dfp = calc_tableau_pret(pr, p["date_ouverture"], p["nb_mois_projection"])
+            vals = []
+            for a in ann_ro["annee"]:
+                d_fin = _date(int(a), 12, 31)
+                r = dfp[dfp["date"] <= d_fin]
+                vals.append(r.iloc[-1]["capital_restant"] / 1000 if not r.empty else 0)
+            enc_by_pret[nm] = vals
+    if enc_by_pret:
+        fig = go.Figure()
+        colors = ["#f5576c", "#667eea", "#11998e", "#ffcc00", "#764ba2", "#a0522d", "#f093fb"]
+        for ci, (nm, vals) in enumerate(enc_by_pret.items()):
+            fig.add_trace(go.Bar(x=xr, y=vals, name=nm, marker_color=colors[ci % len(colors)]))
+        total_k = [sum(v[i] for v in enc_by_pret.values()) for i in range(len(xr))]
+        fig.add_trace(go.Scatter(x=xr, y=total_k, mode="markers+text",
+                                 text=[f"<b>{v:,.0f}</b>" for v in total_k],
+                                 textposition="top center", textfont=dict(size=11, color="#1a1a6e"),
+                                 marker=dict(size=1, color="rgba(0,0,0,0)"),
+                                 showlegend=False, hoverinfo="skip", cliponaxis=False))
+        fig.update_layout(title="Rocher - Evolution endettement (K€)", barmode="stack",
+                          xaxis=dict(type="category"),
+                          yaxis=dict(tickformat=",.0f",
+                                     range=[0, max(total_k) * 1.18] if total_k else None),
+                          legend=leg)
+        figs["ro_endettement"] = fig
+
+    return figs
+
+
+def _section_rocher_table(ann_ro):
+    """Tableau Details des chiffres Rocher."""
+    fmt = lambda v: f"{v:,.0f} €".replace(",", " ")
+    rows = []
+    for _, row in ann_ro.iterrows():
+        rows.append([
+            int(row["annee"]),
+            fmt(row["loyer"]),
+            fmt(row["interets_recus"]),
+            fmt(row["subside_rw"]),
+            fmt(row["capital_recu"]),
+            fmt(row["interets_payes"]),
+            fmt(row["amortissement"]),
+            fmt(row["resultat"]),
+            fmt(row["res_cumul"]),
+            fmt(row["capital_paye"]),
+            fmt(row["cash"]),
+            fmt(row["cash_cumul"]),
+        ])
+    return _table_html(
+        ["Annee", "Loyer recu", "Interets recus", "Subside RW", "Capital recu (Ch.)",
+         "Interets payes", "Amortissement", "Resultat", "Resultat cumule",
+         "Remb. capital paye", "Cash flow", "Cash flow cumul"],
+        rows,
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Assemblage final
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -435,6 +635,11 @@ def build_rapport_html(plan_nom, params):
     x_lbl = [str(int(a)) for a in ann["annee"]]
 
     figs = _build_charts(p, ann, x_lbl)
+
+    # Donnees et figures Rocher
+    ann_ro, prets_ro_data, fp_ro_init = _compute_rocher(p)
+    figs_ro = _build_rocher_charts(p, ann_ro, prets_ro_data, fp_ro_init)
+    rocher_table_html = _section_rocher_table(ann_ro)
 
     # ── KPIs ──
     rd = p.get("rocher_data", {})
@@ -560,6 +765,21 @@ def build_rapport_html(plan_nom, params):
     {f'<div class="comment-box">{comment_ro}</div>' if comment_ro else ''}
     <p><i>L'Immobilière Rocher porte les investissements immobiliers du projet et perçoit un loyer
     du Château d'Argenteau ainsi que les intérêts du prêt intra-groupe.</i></p>
+
+    <h3>P&L</h3>
+    {_fig_html(figs_ro['ro_pnl'], 450)}
+
+    <h3>Cash flow</h3>
+    {_fig_html(figs_ro['ro_cashflow'], 450)}
+
+    <h3>Details des chiffres</h3>
+    {rocher_table_html}
+
+    <h3>Fonds propres</h3>
+    {_fig_html(figs_ro['ro_fp'], 380)}
+
+    <h3>Endettement</h3>
+    {_fig_html(figs_ro.get('ro_endettement'), 400) if 'ro_endettement' in figs_ro else ''}
 
     <h2 id="sec-5" style="border-bottom-color:#f5576c;">5. Plan financier — Château d'Argenteau</h2>
     {f'<div class="comment-box ch">{comment_ch}</div>' if comment_ch else ''}
