@@ -5819,10 +5819,13 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             "cf_directs_total": "sum",
             "cf_directs_hebergement": "sum", "cf_directs_brasserie": "sum",
             "cf_directs_bar": "sum", "cf_directs_spa": "sum", "cf_directs_evenements": "sum",
-            "cf_indirects_total": "sum",
+            "cf_indirects_total": "sum", "cf_total": "sum", "cf_total_cash": "sum",
             "marge_brute": "sum", "marge": "sum", "subside_rw": "sum",
             "ebitda": "sum", "amortissement": "sum", "ebit": "sum",
             "dette_interets": "sum", "dette_capital": "sum",
+            "impot": "sum", "impot_cash": "sum",
+            "tva_paiement": "sum", "reinvest_acquisition": "sum",
+            "delay_adjustment": "sum",
             "resultat_net": "sum", "cash_flow": "sum", "cash_flow_cumul": "last",
             "nuitees": "sum", "taux_occupation": "mean",
         }).reset_index()
@@ -6552,12 +6555,39 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             for _n, _df in dfs_ro.items():
                 r = _df[_df["date"]==d]
                 if not r.empty: int_pay += r.iloc[0]["interets"]; cap_pay += r.iloc[0]["capital"]
-            rows_ro.append({"date":d, "annee":d.year, "produits":rev+int_rec, "charges":int_pay+amort_m_ro,
-                "resultat":rev+int_rec-int_pay-amort_m_ro, "cash":rev+int_rec+cap_rec-int_pay-cap_pay})
+            # Subside RW Rocher : 1/15 du montant par an au resultat, a partir de An 2
+            # Pas d'impact cash (perception = remboursement de la dette par les ghost rows)
+            annee_idx_ro = m // 12
+            sub_rw = 0
+            if annee_idx_ro >= 1:
+                for _pr_sub in prets_ro:
+                    if _pr_sub.get("subside_rw", False):
+                        duree_sub = 15
+                        annee_sub = annee_idx_ro - 1
+                        if annee_sub < duree_sub:
+                            sub_rw += _pr_sub["montant"] / duree_sub / 12
+            resultat_m = rev + int_rec - int_pay - amort_m_ro + sub_rw
+            cash_m = rev + int_rec + cap_rec - int_pay - cap_pay
+            rows_ro.append({
+                "date": d, "annee": d.year,
+                "loyer": rev, "interets_recus": int_rec, "capital_recu": cap_rec,
+                "interets_payes": int_pay, "capital_paye": cap_pay,
+                "amortissement": amort_m_ro, "subside_rw": sub_rw,
+                "produits": rev + int_rec + sub_rw,
+                "charges": int_pay + amort_m_ro,
+                "resultat": resultat_m, "cash": cash_m,
+            })
         df_ro = pd.DataFrame(rows_ro)
         df_ro["cash_cumul"] = df_ro["cash"].cumsum()
         df_ro["res_cumul"] = df_ro["resultat"].cumsum()
-        ann_ro = df_ro.groupby("annee").agg({"produits":"sum","charges":"sum","resultat":"sum","cash":"sum","cash_cumul":"last","res_cumul":"last"}).reset_index()
+        ann_ro = df_ro.groupby("annee").agg({
+            "loyer": "sum", "interets_recus": "sum", "capital_recu": "sum",
+            "interets_payes": "sum", "capital_paye": "sum",
+            "amortissement": "sum", "subside_rw": "sum",
+            "produits": "sum", "charges": "sum",
+            "resultat": "sum", "cash": "sum",
+            "cash_cumul": "last", "res_cumul": "last",
+        }).reset_index()
         xr = [str(int(a)) for a in ann_ro["annee"]]
 
         fig = go.Figure()
@@ -6584,6 +6614,25 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         fig.add_hline(y=0, line_dash="dot", line_color="gray")
         fig.update_layout(title="Rocher — Cash flow (K\u20ac)", height=500, xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f"), legend=_leg)
         _show_fig(fig, key="ro_cashflow")
+
+        # Detail des chiffres - Rocher
+        st.markdown("### Details des chiffres")
+        _fmt_ro = lambda v: f"{v:,.0f} €"
+        _df_tbl_ro = pd.DataFrame({
+            "Annee": [str(int(a)) for a in ann_ro["annee"]],
+            "Loyer recu": [_fmt_ro(v) for v in ann_ro["loyer"]],
+            "Interets recus (Chateau)": [_fmt_ro(v) for v in ann_ro["interets_recus"]],
+            "Subside RW": [_fmt_ro(v) for v in ann_ro["subside_rw"]],
+            "Capital recu (Chateau)": [_fmt_ro(v) for v in ann_ro["capital_recu"]],
+            "Interets payes": [_fmt_ro(v) for v in ann_ro["interets_payes"]],
+            "Amortissement": [_fmt_ro(v) for v in ann_ro["amortissement"]],
+            "Resultat": [_fmt_ro(v) for v in ann_ro["resultat"]],
+            "Resultat cumule": [_fmt_ro(v) for v in ann_ro["res_cumul"]],
+            "Remb. capital paye": [_fmt_ro(v) for v in ann_ro["capital_paye"]],
+            "Cash Flow": [_fmt_ro(v) for v in ann_ro["cash"]],
+            "Cash Flow Cumul": [_fmt_ro(v) for v in ann_ro["cash_cumul"]],
+        })
+        st.dataframe(_df_tbl_ro, use_container_width=True, hide_index=True)
 
         fig = go.Figure()
         _cp_ro_k = K(fp_ro + ann_ro["res_cumul"])
@@ -7084,6 +7133,39 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         fig.update_layout(title="Cash flow et Tresorerie (K\u20ac)", height=450,
             xaxis=dict(type="category"), yaxis=dict(tickformat=",.0f"), legend=_leg)
         _show_fig(fig, key="ch_cashflow")
+
+        # Detail des chiffres - Chateau (vue d'ensemble annuelle)
+        st.markdown("### Details des chiffres")
+        _fmt_ch = lambda v: f"{v:,.0f} €"
+        _pct_ch = lambda num, den: f"{num/den*100:.1f}%" if den != 0 else "-"
+        _df_tbl_ch = pd.DataFrame({
+            "Annee": [str(int(a)) for a in _ann["annee"]],
+            "CA Total": [_fmt_ch(v) for v in _ann["ca_total"]],
+            "CV Total": [_fmt_ch(v) for v in _ann["cv_total"]],
+            "Marge Brute": [_fmt_ch(v) for v in _ann["marge_brute"]],
+            "Marge Brute %": [_pct_ch(m, c) for m, c in zip(_ann["marge_brute"], _ann["ca_total"])],
+            "CF Directs": [_fmt_ch(v) for v in _ann["cf_directs_total"]],
+            "Marge service": [_fmt_ch(v) for v in _ann["marge"]],
+            "Subside RW": [_fmt_ch(v) for v in _ann["subside_rw"]],
+            "CF Indirects": [_fmt_ch(v) for v in _ann["cf_indirects_total"]],
+            "EBITDA": [_fmt_ch(v) for v in _ann["ebitda"]],
+            "EBITDA %": [_pct_ch(e, c) for e, c in zip(_ann["ebitda"], _ann["ca_total"])],
+            "Amortissement": [_fmt_ch(v) for v in _ann["amortissement"]],
+            "EBIT": [_fmt_ch(v) for v in _ann["ebit"]],
+            "Interets": [_fmt_ch(v) for v in _ann["dette_interets"]],
+            "Resultat avant impot": [_fmt_ch(v) for v in (_ann["ebit"] - _ann["dette_interets"] + _ann["subside_rw"])],
+            "ISOC (charge)": [_fmt_ch(v) for v in _ann["impot"]],
+            "Resultat Net": [_fmt_ch(v) for v in _ann["resultat_net"]],
+            "ISOC (paye)": [_fmt_ch(v) for v in _ann["impot_cash"]],
+            "Remb. dette": [_fmt_ch(v) for v in _ann["dette_capital"]],
+            "Reinvestissements": [_fmt_ch(v) for v in _ann["reinvest_acquisition"]],
+            "TVA a reverser": [_fmt_ch(v) for v in _ann["tva_paiement"]],
+            "Delta Cash Pers.": [_fmt_ch(v) for v in (_ann["cf_total_cash"] - _ann["cf_total"])],
+            "BFR (impact cash)": [_fmt_ch(v) for v in _ann["delay_adjustment"]],
+            "Cash Flow": [_fmt_ch(v) for v in _ann["cash_flow"]],
+            "Cash Flow Cumul": [_fmt_ch(v) for v in _ann["cash_flow_cumul"]],
+        })
+        st.dataframe(_df_tbl_ch, use_container_width=True, hide_index=True)
 
         # 5b. Bilan
         st.markdown("### Bilan")
