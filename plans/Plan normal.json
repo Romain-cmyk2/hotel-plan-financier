@@ -142,11 +142,11 @@
     "Divers": 5.0
   },
   "cv_brasserie_pct": 0.35,
-  "cv_eau_brasserie_par_client": 0.0,
+  "cv_eau_brasserie_par_client": 0.2,
   "cv_bar_beverage_pct": 0.3,
   "cv_bar_consommable_unite": 0.2,
   "cv_bar_pct": 0.25,
-  "cv_eau_bar_par_client": 0.0,
+  "cv_eau_bar_par_client": 0.1,
   "cv_spa_soin_cout": 50.0,
   "cv_spa_produits_soin": 5.0,
   "cv_spa_consommable_entree": 1.5,
@@ -156,13 +156,13 @@
   "cv_seminaire_pause_participant": 8.0,
   "cv_seminaire_materiel_participant": 3.0,
   "cv_seminaire_equipement": 15.0,
-  "cv_seminaire_energie": 75.0,
-  "cv_seminaire_nettoyage": 500.0,
+  "cv_seminaire_energie": 100.0,
+  "cv_seminaire_nettoyage": 350.0,
   "cv_seminaire_pct": 0.3,
   "cv_mariage_energie": 150.0,
-  "cv_mariage_nettoyage": 1000.0,
+  "cv_mariage_nettoyage": 750.0,
   "cv_mariage_pct": 0.35,
-  "cv_divers_consommable": 1.0,
+  "cv_divers_consommable": 8.0,
   "charges_patronales_pct": 0.35,
   "personnel_hebergement": [
     {
@@ -563,7 +563,7 @@
   "cv_commission_cb_pct_chambres": 0.8,
   "cv_pdj_pct": 0.35,
   "cv_salles_chateau_energie": 100.0,
-  "cv_salles_chateau_nettoyage": 500.0,
+  "cv_salles_chateau_nettoyage": 350.0,
   "personnel_evenements": [],
   "fonds_propres_investisseurs": [
     {
