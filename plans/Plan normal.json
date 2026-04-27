@@ -529,7 +529,7 @@
         "nom": "Prêt banque",
         "creancier": "Banque",
         "montant": 1500000,
-        "taux_annuel": 0.04,
+        "taux_annuel": 0.06,
         "duree_ans": 2,
         "differe_mois": 0,
         "type": "interet_seul",
