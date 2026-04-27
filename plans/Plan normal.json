@@ -10,50 +10,50 @@
   "nb_invites_seminaire": 50,
   "taux_occ": [
     0.42,
-    0.48,
-    0.55,
-    0.62
+    0.5,
+    0.58,
+    0.65
   ],
   "taux_occ_brasserie": [
     0.42,
     0.47,
     0.525,
-    0.6
+    0.62
   ],
   "saisonnalite": [
-    0.626,
-    0.657,
-    0.86,
-    1.017,
-    1.126,
-    1.22,
-    1.283,
-    1.33,
-    1.173,
-    1.064,
-    0.782,
-    0.86
+    0.63,
+    0.66,
+    0.87,
+    1.03,
+    1.14,
+    1.23,
+    1.29,
+    1.34,
+    1.18,
+    1.07,
+    0.79,
+    0.76
   ],
   "segments": {
     "Loisirs": {
       "part": 0.5,
-      "prix": 250
+      "prix": 255
     },
     "Affaires": {
       "part": 0.25,
-      "prix": 230
+      "prix": 240
     },
     "Groupes": {
       "part": 0.05,
-      "prix": 195
+      "prix": 210
     },
     "MICE": {
       "part": 0.05,
-      "prix": 195
+      "prix": 210
     },
     "Evenementiel": {
       "part": 0.15,
-      "prix": 230
+      "prix": 235
     }
   },
   "segments_part_ota": {
@@ -69,10 +69,10 @@
     0.025,
     0.025
   ],
-  "brasserie_prix_souper": 75,
+  "brasserie_prix_souper": 90,
   "brasserie_jours_souper": 4,
   "brasserie_services_souper": 1.0,
-  "brasserie_prix_diner": 45,
+  "brasserie_prix_diner": 60,
   "brasserie_jours_diner": 4,
   "brasserie_services_diner": 1.5,
   "brasserie_part_nourriture": 0.6,
@@ -88,14 +88,14 @@
   "petit_dej_prix": 37.5,
   "petit_dej_taux": 0.85,
   "bar_prix_moyen": 18,
-  "bar_taux_clients_hotel": 0.4,
+  "bar_taux_clients_hotel": 0.3,
   "bar_conso_moyenne": 22.0,
   "bar_clients_ext_jour": 10,
   "bar_conso_ext_moyenne": 25.0,
   "bar_jours_ouvert_semaine": 7,
   "spa_entree_hotel_prix": 0,
   "spa_entree_hotel_taux": 0.2,
-  "spa_entree_ext_prix": 55,
+  "spa_entree_ext_prix": 45,
   "spa_entree_ext_nb_mois": 25,
   "spa_soin_hotel_prix": 120,
   "spa_soin_hotel_taux": 0.1,
@@ -116,11 +116,11 @@
   "seminaire_prix_participant": 65,
   "seminaire_duree_moy_jours": 1.0,
   "mariage_nb_an": 20,
-  "mariage_nb_convives_moy": 120,
+  "mariage_nb_convives_moy": 100,
   "mariage_prix_convive": 95,
   "mariage_prix_location": 4500,
   "mariage_catering_prix_convive": 80,
-  "mariage_commission_catering_pct": 0.1,
+  "mariage_commission_catering_pct": 0.05,
   "divers_prix_nuitee": 3.0,
   "divers_taux": 1.0,
   "loyer_restaurant_mensuel": 5860,
