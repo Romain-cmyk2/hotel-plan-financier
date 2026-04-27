@@ -390,7 +390,7 @@
     },
     {
       "categorie": "Bornes electriques & Panneaux photovolt.",
-      "montant": 500000,
+      "montant": 600000,
       "duree_amort": 5
     },
     {
@@ -426,9 +426,9 @@
   ],
   "investissements_supplementaires": {
     "inv_bornes": {
-      "prix_unite": 500000,
+      "prix_unite": 600000,
       "duree_amort": 5,
-      "montant": 500000
+      "montant": 600000
     },
     "inv_uniformes": {
       "prix_unite": 200,
@@ -480,7 +480,7 @@
     {
       "nom": "Banque",
       "montant": 500000,
-      "taux_annuel": 0.03,
+      "taux_annuel": 0.04,
       "duree_ans": 2,
       "differe_mois": 0,
       "type": "interet_seul",
