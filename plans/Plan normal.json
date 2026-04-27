@@ -224,8 +224,8 @@
       "cout_brut": 50000
     },
     {
-      "poste": "Maintenance / Technique",
-      "etp": 2.33,
+      "poste": "Maintenance / Technique / Jardin",
+      "etp": 2.5,
       "cout_brut": 34000
     },
     {
@@ -235,7 +235,7 @@
     },
     {
       "poste": "Administration / Comptabilite / RH",
-      "etp": 1.5,
+      "etp": 2.0,
       "cout_brut": 34000
     },
     {
@@ -271,7 +271,7 @@
     "Produits soins (stock fixe)": 6000
   },
   "cf_directs_evenements": {
-    "Materiel seminaires / mariages": 5000
+    "Materiel seminaires / mariages / Entretiens": 5000
   },
   "charges_fixes_indirectes_par_annee": {
     "Assurances": [
@@ -347,7 +347,7 @@
   },
   "charges_fixes_indirectes": {
     "Assurances": 35000,
-    "Taxe fonciere": 50000,
+    "Taxe fonciere": 80000,
     "Energie fixe": 40000,
     "Contrats maintenance": 45000,
     "Logiciels IT": 24000,
@@ -626,11 +626,6 @@
   "cv_franchise_forfait_mois": 5000.0,
   "precompte_annees_actives": [
     1,
-    2,
-    3,
-    4,
-    5,
-    6,
     7,
     8,
     9,
