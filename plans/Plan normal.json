@@ -559,8 +559,8 @@
       },
       {
         "categorie": "Imprevus",
-        "montant": 0,
-        "duree_amort": 0
+        "montant": 200000,
+        "duree_amort": 15
       },
       {
         "categorie": "Autres",
