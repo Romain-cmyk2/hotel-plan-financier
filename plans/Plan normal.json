@@ -568,15 +568,15 @@
         "duree_amort": 0
       }
     ],
-    "fonds_propres_initial": 6750000,
+    "fonds_propres_initial": 6900000,
     "fonds_propres_investisseurs": [
       {
         "nom": "LC Création",
-        "montant": 4050000
+        "montant": 4150000
       },
       {
         "nom": "Partenaire",
-        "montant": 2700000
+        "montant": 2750000
       }
     ]
   },
