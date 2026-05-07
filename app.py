@@ -153,6 +153,34 @@ def supprimer_plan(nom):
             except Exception:
                 pass
 
+
+# ─── Permissions (proprietaire) ────────────────────────────────────────────────
+
+def _current_user_email():
+    return (st.session_state.get("user_email") or "").strip().lower()
+
+
+def _plan_owner(p):
+    return (p.get("owner") or "").strip().lower()
+
+
+def _is_owner(p):
+    """True si l'utilisateur connecte est proprietaire du plan."""
+    if st.session_state.get("auth_mode") != "edit":
+        return False
+    owner = _plan_owner(p)
+    if not owner:
+        return True  # Plan orphelin : modifiable par tout user Edit
+    return owner == _current_user_email()
+
+
+def _is_readonly(p):
+    """True si le plan est en lecture seule pour l'utilisateur courant."""
+    if st.session_state.get("auth_mode") == "visu":
+        return True
+    return not _is_owner(p)
+
+
 st.set_page_config(
     page_title="Plan Financier Hotel 5*",
     page_icon="\U0001F3E8",
@@ -4998,7 +5026,10 @@ def _module_rocher():
     with col_s:
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("\U0001F4BE Sauver", key="rocher_save", use_container_width=True):
+            _rocher_ro = _is_readonly(p_chateau)
+            if st.button("\U0001F4BE Sauver", key="rocher_save",
+                         use_container_width=True, disabled=_rocher_ro,
+                         help=("Lecture seule" if _rocher_ro else None)):
                 sauvegarder_plan(plan_actif, p_chateau)
                 st.toast("Sauvegarde !")
         with c2:
@@ -5617,7 +5648,7 @@ def _comment_slot(p, plan_nom, slot_id, print_mode=False):
     - Print mode : affiche le commentaire s'il existe, pas de boutons
     """
     comments = p.setdefault("commentaires", {})
-    _is_visu = st.session_state.get("auth_mode") == "visu"
+    _is_visu = _is_readonly(p)
     has_comment = slot_id in comments and comments[slot_id].strip()
     editing_key = f"_editing_comment_{slot_id}"
 
@@ -6470,7 +6501,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             "A terme, l'entite degage un resultat positif croissant a mesure que la dette se rembourse."
         )
         st.markdown("### Synthese & constats")
-        _is_visu_report = st.session_state.get("auth_mode") == "visu"
+        _is_visu_report = _is_readonly(p)
         if _is_visu_report:
             st.markdown(f'<div style="background:#f0fdf4; border-left:4px solid #11998e; '
                         f'padding:14px 18px; border-radius:6px; margin-bottom:16px; '
@@ -6728,7 +6759,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             f"Le plan vise un EBITDA positif des les premieres annees de croisiere et un retour sur investissement progressif."
         )
         st.markdown("### Synthese & constats")
-        _is_visu_report = st.session_state.get("auth_mode") == "visu"
+        _is_visu_report = _is_readonly(p)
         if _is_visu_report:
             st.markdown(f'<div style="background:#fef2f2; border-left:4px solid #f5576c; '
                         f'padding:14px 18px; border-radius:6px; margin-bottom:16px; '
@@ -7429,6 +7460,8 @@ def _auto_save(p, plan_name):
     """
     if st.session_state.get("auth_mode") == "visu":
         return  # Pas de sauvegarde en mode lecture
+    if _is_readonly(p):
+        return  # Non-proprietaire : pas d'autosave
     if plan_name and plan_name != "Defaut":
         sauvegarder_plan(plan_name, p, local_only=True)
         st.session_state["_last_autosave"] = True
@@ -7533,12 +7566,24 @@ def main():
                         unsafe_allow_html=True)
             _code = st.text_input("Code d'acces", type="password", key="_login_code",
                                   placeholder="Saisissez votre code...")
+            _email = st.text_input(
+                "Adresse email (requise pour le mode Edition)",
+                key="_login_email",
+                placeholder="prenom.nom@exemple.com",
+                help="L'email identifie le proprietaire des plans. Inutile en mode lecture.",
+            )
             if st.button("Se connecter", use_container_width=True, type="primary"):
                 if _code == "ArgenteauEdit!":
-                    st.session_state["auth_mode"] = "edit"
-                    st.rerun()
+                    _e = (_email or "").strip().lower()
+                    if "@" not in _e or "." not in _e:
+                        st.error("Email invalide. Saisissez une adresse contenant '@' et '.'.")
+                    else:
+                        st.session_state["auth_mode"] = "edit"
+                        st.session_state["user_email"] = _e
+                        st.rerun()
                 elif _code == "ArgenteauVisu!":
                     st.session_state["auth_mode"] = "visu"
+                    st.session_state["user_email"] = ""
                     st.rerun()
                 else:
                     st.error("Code incorrect.")
@@ -7546,8 +7591,16 @@ def main():
 
     _is_visu = st.session_state.get("auth_mode") == "visu"
 
+    # Lecture seule par non-proprietaire : determinee selon le plan actif
+    _active_p = st.session_state.get("params_charges")
+    _is_non_owner_view = (
+        st.session_state.get("auth_mode") == "edit"
+        and isinstance(_active_p, dict)
+        and not _is_owner(_active_p)
+    )
+
     # ── Mode lecture : desactiver tous les inputs via CSS ──
-    if _is_visu:
+    if _is_visu or _is_non_owner_view:
         st.markdown("""<style>
             /* Desactiver tous les inputs */
             [data-testid="stNumberInput"] input,
@@ -7566,7 +7619,14 @@ def main():
                 opacity: 0.6 !important;
             }
         </style>""", unsafe_allow_html=True)
-        st.warning("\U0001F512 Mode lecture seule — les modifications sont desactivees")
+        if _is_visu:
+            st.warning("\U0001F512 Mode lecture seule — les modifications sont desactivees")
+        else:
+            _ow = (_active_p.get("owner") or "").strip().lower() if isinstance(_active_p, dict) else ""
+            st.warning(
+                f"\U0001F512 Plan en lecture seule — proprietaire : {_ow or 'inconnu'}. "
+                "Vous pouvez consulter mais pas modifier."
+            )
         # Variable globale pour desactiver les boutons de modification
         st.session_state["_visu_mode"] = True
 
@@ -7575,11 +7635,20 @@ def main():
         _rpt_nom = st.session_state["_rapport_plan"]
         c_back, c_save_gh, c_dl, c_html = st.columns([1, 1.2, 1, 1.2])
         with c_save_gh:
-            _save_disabled = st.session_state.get("auth_mode") == "visu"
+            try:
+                _p_rpt_check = charger_plan(_rpt_nom)
+                _save_disabled = _is_readonly(_p_rpt_check)
+                _ow_rpt = (_p_rpt_check.get("owner") or "").strip().lower()
+            except Exception:
+                _save_disabled = st.session_state.get("auth_mode") == "visu"
+                _ow_rpt = ""
+            _help_rpt = "Pousse les commentaires et modifications du rapport sur GitHub."
+            if _save_disabled and st.session_state.get("auth_mode") == "edit":
+                _help_rpt = f"Lecture seule — proprietaire : {_ow_rpt or 'inconnu'}"
             if st.button("\U0001F4BE Sauvegarder sur GitHub",
                          key="btn_save_gh_rpt", use_container_width=True,
                          disabled=_save_disabled,
-                         help="Pousse les commentaires et modifications du rapport sur GitHub."):
+                         help=_help_rpt):
                 try:
                     _p_to_save = charger_plan(_rpt_nom)
                     sauvegarder_plan(_rpt_nom, _p_to_save)
@@ -7657,7 +7726,30 @@ def main():
             if st.button("\u2753 Guide d'utilisation", key="btn_guide", use_container_width=True):
                 _show_guide("visu" if _is_visu else "edit")
 
-        plans_existants = lister_plans()
+        _all_plans = lister_plans()
+        _user_email = _current_user_email()
+
+        # Filtrage selon le mode et le proprietaire
+        def _plan_meta(nom):
+            try:
+                _p = charger_plan(nom)
+                return _p.get("owner", "")
+            except Exception:
+                return ""
+
+        _owners = {nom: (_plan_meta(nom) or "").strip().lower() for nom in _all_plans}
+
+        if _is_visu:
+            # Visu : uniquement Plan normal
+            plans_existants = [n for n in _all_plans if n == "Plan normal"]
+        else:
+            # Edit : Plan normal + ses propres plans (orphelins inclus)
+            plans_existants = [
+                n for n in _all_plans
+                if n == "Plan normal"
+                or _owners.get(n, "") == _user_email
+                or _owners.get(n, "") == ""
+            ]
 
         if _is_visu:
             # Mode lecture : plans centres
@@ -7676,6 +7768,7 @@ def main():
                         p_new = charger_plan("Plan normal")
                     except Exception:
                         p_new = params_defaut()
+                    p_new["owner"] = _user_email
                     sauvegarder_plan(nouveau_nom.strip(), p_new)
                     st.session_state["params_charges"] = p_new
                     st.session_state["plan_actif"] = nouveau_nom.strip()
@@ -7729,8 +7822,18 @@ def main():
                             _c_name, _c_actions = st.columns([1, 3])
                         else:
                             _c_name, _c_actions, _c_mgmt = st.columns([1, 3, 1])
+                        _plan_owner_norm = _owners.get(plan_nom, "")
+                        if not _is_visu:
+                            if not _plan_owner_norm:
+                                _badge = "<span style='color:#999; font-size:0.85em;'>(orphelin)</span>"
+                            elif _plan_owner_norm == _user_email:
+                                _badge = "<span style='color:#11998e; font-size:0.85em;'>(vous)</span>"
+                            else:
+                                _badge = f"<span style='color:#888; font-size:0.85em;'>(lecture seule \u2014 {_plan_owner_norm})</span>"
+                        else:
+                            _badge = ""
                         with _c_name:
-                            st.markdown(f"**\U0001F4C2 {plan_nom}**")
+                            st.markdown(f"**\U0001F4C2 {plan_nom}** {_badge}", unsafe_allow_html=True)
                         with _c_actions:
                             _ca1, _ca2 = st.columns(2)
                             with _ca1:
@@ -7744,13 +7847,14 @@ def main():
                                     st.rerun()
                         if not _is_visu:
                             with _c_mgmt:
+                                _is_mine = (_plan_owner_norm == _user_email) or (not _plan_owner_norm)
                                 _cm1, _cm2 = st.columns(2)
                                 with _cm1:
-                                    if st.button("\u270f\ufe0f", key=f"rename_{plan_nom}", help="Renommer"):
+                                    if st.button("\u270f\ufe0f", key=f"rename_{plan_nom}", help="Renommer", disabled=not _is_mine):
                                         st.session_state[_rename_key] = True
                                         st.rerun()
                                 with _cm2:
-                                    if st.button("\U0001f5d1\ufe0f", key=f"delete_{plan_nom}", help="Supprimer"):
+                                    if st.button("\U0001f5d1\ufe0f", key=f"delete_{plan_nom}", help="Supprimer", disabled=not _is_mine):
                                         st.session_state[_delete_key] = True
                                         st.rerun()
             else:
@@ -7815,7 +7919,7 @@ def main():
                     f' &mdash; jusqu\'en {_date_fin}</p>',
                     unsafe_allow_html=True)
             with _c3:
-                if not _is_visu:
+                if not _is_visu and _is_owner(_p_mod):
                     st.markdown('<div style="margin-top: 4px;"></div>', unsafe_allow_html=True)
                     if st.button("\u270f\ufe0f Modifier", key="btn_edit_communs", use_container_width=True):
                         st.session_state["_editing_communs"] = True
@@ -7847,7 +7951,11 @@ def main():
 
             _bc1, _bc2 = st.columns(2)
             with _bc1:
-                if st.button("\U0001F4BE Sauver et fermer", key="btn_save_communs", use_container_width=True, type="primary"):
+                _communs_ro = _is_readonly(_p_mod)
+                if st.button("\U0001F4BE Sauver et fermer", key="btn_save_communs",
+                             use_container_width=True, type="primary",
+                             disabled=_communs_ro,
+                             help=("Lecture seule" if _communs_ro else None)):
                     sauvegarder_plan(st.session_state.get("plan_actif", ""), _p_mod)
                     st.session_state["_editing_communs"] = False
                     st.toast("Parametres sauvegardes !")
@@ -7962,7 +8070,13 @@ def main():
         st.markdown("<br>", unsafe_allow_html=True)
         c_s1, c_s2 = st.columns(2)
         with c_s1:
-            if st.button("\U0001F4BE Sauvegarder", key="btn_save_top", use_container_width=True, disabled=_is_visu):
+            _save_disabled_top = _is_visu or not _is_owner(p)
+            _save_help_top = None
+            if not _is_visu and not _is_owner(p):
+                _ow_top = (p.get("owner") or "").strip().lower()
+                _save_help_top = f"Lecture seule \u2014 proprietaire : {_ow_top or 'inconnu'}"
+            if st.button("\U0001F4BE Sauvegarder", key="btn_save_top",
+                         use_container_width=True, disabled=_save_disabled_top, help=_save_help_top):
                 sauvegarder_plan(plan_actif, p)
                 st.toast(f"Plan \u00ab {plan_actif} \u00bb sauvegarde !")
         with c_s2:
