@@ -7297,17 +7297,20 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
 
         # Export Excel
         import io as _io_pl
-        _xl_buf = _io_pl.BytesIO()
-        with pd.ExcelWriter(_xl_buf, engine="openpyxl") as _xl:
-            _df_pl.to_excel(_xl, sheet_name="Compte de resultat", index=False)
-        _xl_buf.seek(0)
-        st.download_button(
-            "\U0001F4CA Compte de resultat (Excel)",
-            data=_xl_buf,
-            file_name=f"compte_resultat_{plan_nom.replace(' ', '_')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="dl_pl_xlsx",
-        )
+        try:
+            _xl_buf = _io_pl.BytesIO()
+            with pd.ExcelWriter(_xl_buf, engine="openpyxl") as _xl:
+                _df_pl.to_excel(_xl, sheet_name="Compte de resultat", index=False)
+            _xl_buf.seek(0)
+            st.download_button(
+                "\U0001F4CA Compte de resultat (Excel)",
+                data=_xl_buf,
+                file_name=f"compte_resultat_{plan_nom.replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_pl_xlsx",
+            )
+        except Exception as _e_xl_pl:
+            st.warning(f"Export Excel indisponible : {_e_xl_pl}")
 
         # 5b. Bilan
         st.markdown("### Bilan")
@@ -7606,17 +7609,20 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             _bs_html = _render_bs_html(_df_bs, _bs_rows)
             st.markdown(_bs_html, unsafe_allow_html=True)
 
-            _xl_buf_b = _io_pl.BytesIO()
-            with pd.ExcelWriter(_xl_buf_b, engine="openpyxl") as _xl:
-                _df_bs.to_excel(_xl, sheet_name="Bilan", index=False)
-            _xl_buf_b.seek(0)
-            st.download_button(
-                "\U0001F4CA Bilan (Excel)",
-                data=_xl_buf_b,
-                file_name=f"bilan_{plan_nom.replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="dl_bs_xlsx",
-            )
+            try:
+                _xl_buf_b = _io_pl.BytesIO()
+                with pd.ExcelWriter(_xl_buf_b, engine="openpyxl") as _xl:
+                    _df_bs.to_excel(_xl, sheet_name="Bilan", index=False)
+                _xl_buf_b.seek(0)
+                st.download_button(
+                    "\U0001F4CA Bilan (Excel)",
+                    data=_xl_buf_b,
+                    file_name=f"bilan_{plan_nom.replace(' ', '_')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_bs_xlsx",
+                )
+            except Exception as _e_xl_b:
+                st.warning(f"Export Excel indisponible : {_e_xl_b}")
 
         # ════════════════════════════════════════════════════════════════════
         # 8. SIMULATION (curseurs interactifs)
