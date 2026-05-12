@@ -5841,7 +5841,7 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
     try:
         p = charger_plan(plan_nom)
         df_rpt = projection_complete(p)
-        _ann = df_rpt.groupby("annee").agg({
+        _agg = {
             "ca_total": "sum", "ca_hebergement": "sum", "ca_brasserie": "sum",
             "ca_bar": "sum", "ca_spa": "sum", "ca_salles": "sum",
             "ca_loyer_restaurant": "sum", "ca_divers": "sum",
@@ -5859,7 +5859,13 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
             "delay_adjustment": "sum",
             "resultat_net": "sum", "cash_flow": "sum", "cash_flow_cumul": "last",
             "nuitees": "sum", "taux_occupation": "mean",
-        }).reset_index()
+        }
+        # Postes de bilan : dernier mois de l'annee (decembre)
+        for _bcol in ("creances_clients", "dettes_fournisseurs", "dette_tva",
+                      "dette_isoc", "dette_sociale", "provision_pecule", "provision_13e_mois"):
+            if _bcol in df_rpt.columns:
+                _agg[_bcol] = "last"
+        _ann = df_rpt.groupby("annee").agg(_agg).reset_index()
         _x = [str(int(a)) for a in _ann["annee"]]
         K = lambda v: v / 1000
         _leg = dict(orientation="h", y=-0.15, xanchor="center", x=0.5, font=dict(size=12 if not print_mode else 10))
@@ -7206,6 +7212,103 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         })
         st.dataframe(_df_tbl_ch, use_container_width=True, hide_index=True)
 
+        # ─── Compte de resultat structure ────────────────────────────────────
+        st.markdown(
+            '<div style="font-size:17px; font-weight:700; color:#2a3f5f; '
+            'margin:24px 0 8px 0; font-family:Arial, sans-serif;">'
+            'Compte de resultat</div>',
+            unsafe_allow_html=True,
+        )
+        _years_h = [str(int(a)) for a in _ann["annee"]]
+        _fmt_e = lambda v: f"{v:,.0f} €" if abs(v) >= 0.5 else "0 €"
+        _fmt_pct = lambda num, den: f"{(num/den*100):.1f}%" if den != 0 else "-"
+        _rows_pl = []
+        def _row(label, vals, bold=False, indent=0, sep_above=False):
+            _rows_pl.append({"label": label, "vals": list(vals), "bold": bold, "indent": indent, "sep": sep_above})
+        # CA
+        _row("Chiffre d'affaires", _ann["ca_total"], bold=True)
+        _row("dont Hebergement", _ann["ca_hebergement"], indent=1)
+        _row("dont Brasserie", _ann["ca_brasserie"], indent=1)
+        _row("dont Bar", _ann["ca_bar"], indent=1)
+        _row("dont Spa", _ann["ca_spa"], indent=1)
+        _row("dont Salles & evenements", _ann["ca_salles"], indent=1)
+        if "ca_loyer_restaurant" in _ann.columns or "ca_divers" in _ann.columns:
+            _autres_ca = _ann.get("ca_loyer_restaurant", 0) + _ann.get("ca_divers", 0)
+            _row("dont Loyer restaurant & divers", _autres_ca, indent=1)
+        _row("(-) Charges variables", -_ann["cv_total"])
+        _row("MARGE BRUTE", _ann["marge_brute"], bold=True, sep_above=True)
+        _mb_pct = [(m/c*100) if c != 0 else 0 for m, c in zip(_ann["marge_brute"], _ann["ca_total"])]
+        _rows_pl.append({"label": "Marge brute %", "vals_pct": _mb_pct, "indent": 1})
+        _row("(-) Charges fixes directes", -_ann["cf_directs_total"])
+        _row("(-) Charges fixes indirectes", -_ann["cf_indirects_total"])
+        _row("EBITDA", _ann["ebitda"], bold=True, sep_above=True)
+        _eb_pct = [(e/c*100) if c != 0 else 0 for e, c in zip(_ann["ebitda"], _ann["ca_total"])]
+        _rows_pl.append({"label": "EBITDA %", "vals_pct": _eb_pct, "indent": 1})
+        _row("(-) Amortissements", -_ann["amortissement"])
+        _row("EBIT", _ann["ebit"], bold=True, sep_above=True)
+        _row("(+) Reprise sur subsides en capital", _ann["subside_rw"])
+        _row("(-) Charges d'interets", -_ann["dette_interets"])
+        _resultat_ai = _ann["ebit"] + _ann["subside_rw"] - _ann["dette_interets"]
+        _row("RESULTAT AVANT IMPOT", _resultat_ai, bold=True, sep_above=True)
+        _row("(-) Impot des societes (ISOC)", -_ann["impot"])
+        _row("RESULTAT NET", _ann["resultat_net"], bold=True, sep_above=True)
+
+        # Construction du DataFrame "wide" (annees en colonnes)
+        _dfd = {"Poste": []}
+        for y in _years_h:
+            _dfd[y] = []
+        for r in _rows_pl:
+            _prefix = "  " * r.get("indent", 0)
+            _dfd["Poste"].append(_prefix + r["label"])
+            if "vals_pct" in r:
+                for i, y in enumerate(_years_h):
+                    _dfd[y].append(f"{r['vals_pct'][i]:.1f}%")
+            else:
+                for i, y in enumerate(_years_h):
+                    _dfd[y].append(_fmt_e(r["vals"][i]))
+        _df_pl = pd.DataFrame(_dfd)
+
+        # Affichage tableau (HTML formate pour respect du gras et indentation)
+        def _render_table_html(df_pl, rows_meta):
+            _h = ['<div style="overflow-x:auto;"><table style="border-collapse:collapse; width:100%; font-size:0.85em; font-family:Arial,sans-serif;">']
+            _h.append('<thead><tr style="background:#667eea; color:white;">')
+            for c in df_pl.columns:
+                _ta = "left" if c == "Poste" else "right"
+                _h.append(f'<th style="padding:6px 10px; text-align:{_ta}; border:1px solid #ccc;">{c}</th>')
+            _h.append("</tr></thead><tbody>")
+            for idx, r in enumerate(rows_meta):
+                _bold = r.get("bold", False)
+                _sep = r.get("sep", False)
+                _bg = "#f5f7ff" if _bold else ("#ffffff" if idx % 2 == 0 else "#fafbfc")
+                _border_top = "border-top:2px solid #667eea;" if _sep else ""
+                _font = "font-weight:700;" if _bold else ""
+                _h.append(f'<tr style="background:{_bg}; {_border_top}">')
+                _ta_poste = "left"
+                _h.append(f'<td style="padding:5px 10px; text-align:{_ta_poste}; border:1px solid #e0e0e0; {_font}">{df_pl.iloc[idx]["Poste"]}</td>')
+                for c in df_pl.columns[1:]:
+                    _val = df_pl.iloc[idx][c]
+                    _h.append(f'<td style="padding:5px 10px; text-align:right; border:1px solid #e0e0e0; {_font}">{_val}</td>')
+                _h.append("</tr>")
+            _h.append("</tbody></table></div>")
+            return "".join(_h)
+
+        _pl_html = _render_table_html(_df_pl, _rows_pl)
+        st.markdown(_pl_html, unsafe_allow_html=True)
+
+        # Export Excel
+        import io as _io_pl
+        _xl_buf = _io_pl.BytesIO()
+        with pd.ExcelWriter(_xl_buf, engine="openpyxl") as _xl:
+            _df_pl.to_excel(_xl, sheet_name="Compte de resultat", index=False)
+        _xl_buf.seek(0)
+        st.download_button(
+            "\U0001F4CA Compte de resultat (Excel)",
+            data=_xl_buf,
+            file_name=f"compte_resultat_{plan_nom.replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_pl_xlsx",
+        )
+
         # 5b. Bilan
         st.markdown("### Bilan")
         pret_rocher_mt = next((pr["montant"] for pr in prets_ch if "rocher" in pr.get("nom","").lower()), 0)
@@ -7279,6 +7382,241 @@ def _render_rapport_complet(plan_nom, _Path, print_mode=False):
         fig.update_layout(title="Ratio (FP+Quasi-FP) / Total passif (%)", height=400,
             xaxis=dict(type="category"), yaxis=dict(range=[0, 105], tickformat=".0f"))
         _show_fig(fig, key="ch_solvabilite")
+
+        # ─── Bilan detaille (fin d'annee) ────────────────────────────────────
+        st.markdown(
+            '<div style="font-size:17px; font-weight:700; color:#2a3f5f; '
+            'margin:24px 0 8px 0; font-family:Arial, sans-serif;">'
+            'Bilan detaille (au 31/12)</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Filtrer aux annees ayant un decembre (exclure derniere annee incomplete)
+        _years_with_dec = set(df_rpt[df_rpt["mois"] == 12]["annee"].unique().tolist())
+        _bs_mask = _ann["annee"].isin(_years_with_dec)
+        _ann_bs = _ann[_bs_mask].reset_index(drop=True)
+        if len(_ann_bs) == 0:
+            st.info("Pas d'annee complete (avec decembre) disponible pour le bilan.")
+        else:
+            _years_bs = [str(int(a)) for a in _ann_bs["annee"]]
+            n_years = len(_ann_bs)
+
+            # Encours par pret au 31/12 N et N+1 (en EUR)
+            _enc_eur_by_pret = {}
+            _enc_eur_next_by_pret = {}
+            _is_subside_pret = {}
+            for pr in prets_ch:
+                if pr["montant"] > 0:
+                    _pn = pr["nom"]
+                    if pr.get("subside_rw"):
+                        _pn += " (RW)"
+                    _enc_eur_by_pret[_pn] = []
+                    _enc_eur_next_by_pret[_pn] = []
+                    _is_subside_pret[_pn] = bool(pr.get("subside_rw"))
+                    dfp = calc_tableau_pret(pr, p["date_ouverture"], p["nb_mois_projection"])
+                    for a in _ann_bs["annee"]:
+                        d_fin = date(int(a), 12, 31)
+                        r = dfp[dfp["date"] <= d_fin]
+                        _v = r.iloc[-1]["capital_restant"] if not r.empty else 0
+                        _enc_eur_by_pret[_pn].append(_v)
+                        d_next = date(int(a) + 1, 12, 31)
+                        r2 = dfp[dfp["date"] <= d_next]
+                        _vn = r2.iloc[-1]["capital_restant"] if not r2.empty else 0
+                        _enc_eur_next_by_pret[_pn].append(_vn)
+
+            def _classify_pret(nm):
+                n = (nm or "").lower()
+                if "rocher" in n:
+                    return "rocher"
+                if "banque" in n or "bank" in n or "(rw)" in n:
+                    return "banque"
+                return "autres"
+
+            dette_bk_lt = [0.0] * n_years
+            dette_bk_ct = [0.0] * n_years
+            dette_ro_lt = [0.0] * n_years
+            dette_ro_ct = [0.0] * n_years
+            dette_au_lt = [0.0] * n_years
+            dette_au_ct = [0.0] * n_years
+            for _pn, _enc_list in _enc_eur_by_pret.items():
+                _enc_next = _enc_eur_next_by_pret[_pn]
+                _cls = _classify_pret(_pn)
+                _is_sub = _is_subside_pret[_pn]
+                if _is_sub:
+                    # Pret subsidie : traite a part dans la section subside
+                    continue
+                for i in range(n_years):
+                    _lt = _enc_next[i]
+                    _ct = max(_enc_list[i] - _enc_next[i], 0)
+                    if _cls == "banque":
+                        dette_bk_lt[i] += _lt
+                        dette_bk_ct[i] += _ct
+                    elif _cls == "rocher":
+                        dette_ro_lt[i] += _lt
+                        dette_ro_ct[i] += _ct
+                    else:
+                        dette_au_lt[i] += _lt
+                        dette_au_ct[i] += _ct
+
+            # Subside RW : reconnaissance comptable CNC, 3 phases
+            # 1. Notification, pas encore percu (Y1): Sub_a_recevoir = grant,
+            #    Sub_en_capital = grant, Dette_finance_subside = grant
+            # 2. Percu (annee de demarrage de l'amortissement, milieu d'annee):
+            #    Sub_a_recevoir = 0 (cash percu), Dette = 0 (rembourse par le subside),
+            #    Sub_en_capital = grant - amort (diminue chaque annee selon l'amort PL)
+            # 3. Apres : Sub_a_recevoir = 0, Dette = 0,
+            #    Sub_en_capital decroit a 100k/an sur 5 ans
+            from dateutil.relativedelta import relativedelta as _rd
+            _subs_loans = [pr for pr in prets_ch
+                           if pr.get("subside_rw") and pr.get("montant", 0) > 0]
+            _grant_total = sum(pr["montant"] for pr in _subs_loans)
+            _subs_amort_cumul = list(_ann_bs["subside_rw"].cumsum())
+            # Date de perception = debut de l'amortissement (= date_ouverture + 1 an)
+            _receipt_date = p["date_ouverture"] + _rd(years=1)
+            _cash_received = []
+            for a in _ann_bs["annee"]:
+                d_end = date(int(a), 12, 31)
+                _cr = _grant_total if _receipt_date <= d_end else 0
+                _cash_received.append(_cr)
+            _sub_a_recevoir = [max(0.0, _grant_total - _cash_received[i]) for i in range(n_years)]
+            _sub_en_capital = [max(0.0, _grant_total - _subs_amort_cumul[i]) for i in range(n_years)]
+            dette_subs = [max(0.0, _grant_total - _cash_received[i]) for i in range(n_years)]
+
+            # Immobilisations brutes (initial)
+            _invs_initial = [inv for inv in p.get("investissements", [])
+                             if inv.get("montant", 0) > 0 and (inv.get("categorie") or "").strip()]
+            _amort_cumul = list(_ann_bs["amortissement"].cumsum())
+            _reinvest_cumul = list(_ann_bs["reinvest_acquisition"].cumsum())
+
+            # Tresorerie au 31/12
+            _surplus_init = fp_ch + sum(pr["montant"] for pr in prets_ch) - sum(inv["montant"] for inv in p["investissements"])
+            _treso = [v + _surplus_init for v in _ann_bs["cash_flow_cumul"]]
+
+            # Resultats cumules
+            _res_cum_list = list(_ann_bs["resultat_net"].cumsum())
+
+            # Dette sociale = cumul des charges personnel non encore decaissees
+            # (cumul P&L personnel - cumul cash personnel). Cela couvre la
+            # provision pecule+13e ET le decalage cash/PL du demarrage mi-annee.
+            _cf_pl_cumul = list(_ann_bs["cf_total"].cumsum())
+            _cf_cash_cumul = list(_ann_bs["cf_total_cash"].cumsum())
+            _dette_soc = [max(0.0, _cf_pl_cumul[i] - _cf_cash_cumul[i]) for i in range(n_years)]
+
+            _bs_rows = []
+            def _b_row(label, vals, bold=False, indent=0, sep=False, header=False):
+                _bs_rows.append({"label": label, "vals": list(vals), "bold": bold, "indent": indent,
+                                 "sep": sep, "header": header})
+
+            _b_row("ACTIF", [""] * n_years, bold=True, header=True)
+            _b_row("Actifs immobilises (brut)", [""] * n_years, bold=True, indent=1)
+            for inv in _invs_initial:
+                _b_row(inv["categorie"], [inv["montant"]] * n_years, indent=2)
+            _b_row("Reinvestissements cumules", _reinvest_cumul, indent=2)
+            _amort_neg = [-v for v in _amort_cumul]
+            _b_row("(-) Amortissements cumules", _amort_neg, indent=2)
+            _brut_total_initial = sum(inv["montant"] for inv in _invs_initial)
+            _vnc_total = [_brut_total_initial + _reinvest_cumul[i] - _amort_cumul[i] for i in range(n_years)]
+            _b_row("VNC totale immobilisations", _vnc_total, bold=True, indent=1)
+            _b_row("Actifs circulants", [""] * n_years, bold=True, indent=1)
+            _creances = list(_ann_bs["creances_clients"]) if "creances_clients" in _ann_bs.columns else [0] * n_years
+            _b_row("Creances commerciales", _creances, indent=2)
+            _b_row("Tresorerie", _treso, indent=2)
+            if any(v != 0 for v in _sub_a_recevoir):
+                _b_row("Subside RW a recevoir", _sub_a_recevoir, indent=2)
+            _total_actif = [_vnc_total[i] + _creances[i] + _treso[i] + _sub_a_recevoir[i] for i in range(n_years)]
+            _b_row("TOTAL ACTIF", _total_actif, bold=True, sep=True)
+
+            _b_row("PASSIF", [""] * n_years, bold=True, header=True)
+            _b_row("Capitaux propres", [""] * n_years, bold=True, indent=1)
+            _b_row("Capital", [fp_ch] * n_years, indent=2)
+            _b_row("Resultats cumules (reserves)", _res_cum_list, indent=2)
+            if any(v != 0 for v in _sub_en_capital):
+                _b_row("Subsides en capital (non amortis)", _sub_en_capital, indent=2)
+            _b_row("Dettes > 1 an", [""] * n_years, bold=True, indent=1)
+            _b_row("Dette bancaire LT", dette_bk_lt, indent=2)
+            _b_row("Dette Rocher LT", dette_ro_lt, indent=2)
+            if any(v != 0 for v in dette_au_lt):
+                _b_row("Autres dettes LT", dette_au_lt, indent=2)
+            if any(v != 0 for v in dette_subs):
+                _b_row("Dette financant subside (RW)", dette_subs, indent=2)
+            _b_row("Dettes <= 1 an", [""] * n_years, bold=True, indent=1)
+            _part_lt_court = [dette_bk_ct[i] + dette_ro_ct[i] + dette_au_ct[i] for i in range(n_years)]
+            _b_row("Part LT echeant dans 1 an", _part_lt_court, indent=2)
+            _dettes_fourn = list(_ann_bs["dettes_fournisseurs"]) if "dettes_fournisseurs" in _ann_bs.columns else [0] * n_years
+            _b_row("Dettes commerciales", _dettes_fourn, indent=2)
+            _dette_tva = list(_ann_bs["dette_tva"]) if "dette_tva" in _ann_bs.columns else [0] * n_years
+            _b_row("TVA a payer", _dette_tva, indent=2)
+            _dette_isoc = list(_ann_bs["dette_isoc"]) if "dette_isoc" in _ann_bs.columns else [0] * n_years
+            _b_row("ISOC a payer", _dette_isoc, indent=2)
+            _b_row("Dette sociale", _dette_soc, indent=2)
+            _total_passif = []
+            for i in range(n_years):
+                _t = (fp_ch + _res_cum_list[i] + _sub_en_capital[i]
+                      + dette_bk_lt[i] + dette_ro_lt[i] + dette_au_lt[i] + dette_subs[i]
+                      + _part_lt_court[i] + _dettes_fourn[i] + _dette_tva[i] + _dette_isoc[i]
+                      + _dette_soc[i])
+                _total_passif.append(_t)
+            _b_row("TOTAL PASSIF", _total_passif, bold=True, sep=True)
+            _ecart = [_total_actif[i] - _total_passif[i] for i in range(n_years)]
+            if any(abs(v) > 1 for v in _ecart):
+                _b_row("Ecart (actif - passif)", _ecart, indent=1)
+
+            _dfd_b = {"Poste": []}
+            for y in _years_bs:
+                _dfd_b[y] = []
+            for r in _bs_rows:
+                _prefix = "  " * r.get("indent", 0)
+                _dfd_b["Poste"].append(_prefix + r["label"])
+                for i, y in enumerate(_years_bs):
+                    v = r["vals"][i]
+                    if v == "" or v is None:
+                        _dfd_b[y].append("")
+                    else:
+                        _dfd_b[y].append(_fmt_e(float(v)))
+            _df_bs = pd.DataFrame(_dfd_b)
+
+            def _render_bs_html(df_bs, rows_meta):
+                _h = ['<div style="overflow-x:auto;"><table style="border-collapse:collapse; width:100%; font-size:0.85em; font-family:Arial,sans-serif;">']
+                _h.append('<thead><tr style="background:#764ba2; color:white;">')
+                for c in df_bs.columns:
+                    _ta = "left" if c == "Poste" else "right"
+                    _h.append(f'<th style="padding:6px 10px; text-align:{_ta}; border:1px solid #ccc;">{c}</th>')
+                _h.append("</tr></thead><tbody>")
+                for idx, r in enumerate(rows_meta):
+                    _bold = r.get("bold", False)
+                    _header = r.get("header", False)
+                    _sep = r.get("sep", False)
+                    if _header:
+                        _bg = "#ede0ff"
+                    elif _bold:
+                        _bg = "#f5f0fa"
+                    else:
+                        _bg = "#ffffff" if idx % 2 == 0 else "#fafbfc"
+                    _border_top = "border-top:2px solid #764ba2;" if _sep else ""
+                    _font = "font-weight:700;" if (_bold or _header) else ""
+                    _h.append(f'<tr style="background:{_bg}; {_border_top}">')
+                    _h.append(f'<td style="padding:5px 10px; text-align:left; border:1px solid #e0e0e0; {_font}">{df_bs.iloc[idx]["Poste"]}</td>')
+                    for c in df_bs.columns[1:]:
+                        _val = df_bs.iloc[idx][c]
+                        _h.append(f'<td style="padding:5px 10px; text-align:right; border:1px solid #e0e0e0; {_font}">{_val}</td>')
+                    _h.append("</tr>")
+                _h.append("</tbody></table></div>")
+                return "".join(_h)
+
+            _bs_html = _render_bs_html(_df_bs, _bs_rows)
+            st.markdown(_bs_html, unsafe_allow_html=True)
+
+            _xl_buf_b = _io_pl.BytesIO()
+            with pd.ExcelWriter(_xl_buf_b, engine="openpyxl") as _xl:
+                _df_bs.to_excel(_xl, sheet_name="Bilan", index=False)
+            _xl_buf_b.seek(0)
+            st.download_button(
+                "\U0001F4CA Bilan (Excel)",
+                data=_xl_buf_b,
+                file_name=f"bilan_{plan_nom.replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_bs_xlsx",
+            )
 
         # ════════════════════════════════════════════════════════════════════
         # 8. SIMULATION (curseurs interactifs)
@@ -7633,7 +7971,7 @@ def main():
     # ─── Affichage rapport plein ecran ──────────────────────────────────
     if "_rapport_plan" in st.session_state:
         _rpt_nom = st.session_state["_rapport_plan"]
-        c_back, c_save_gh, c_dl, c_html = st.columns([1, 1.2, 1, 1.2])
+        c_back, c_save_gh, c_html = st.columns([1, 1.2, 1.2])
         with c_save_gh:
             try:
                 _p_rpt_check = charger_plan(_rpt_nom)
@@ -7659,10 +7997,6 @@ def main():
             if st.button("\u2B05 Retour a l'accueil", key="close_rapport_top"):
                 st.session_state.pop("_rapport_plan", None)
                 st.rerun()
-        with c_dl:
-            if st.button("\U0001F4E5 Version PDF", key="btn_pdf_mode", use_container_width=True):
-                st.session_state["_rapport_print"] = True
-                st.rerun()
         with c_html:
             try:
                 from html_export import build_rapport_html as _build_html_rpt
@@ -7682,18 +8016,7 @@ def main():
                           key="btn_html_err", use_container_width=True, disabled=True,
                           help=f"Erreur : {_e_html}")
 
-        _is_print = st.session_state.get("_rapport_print", False)
-        if _is_print:
-            st.info("\U0001F5A8 Mode PDF actif — Utilisez **Ctrl+P** puis 'Enregistrer au format PDF'.\n\n"
-                    "\u26A0\ufe0f **Important** : dans la boite de dialogue d'impression, cochez "
-                    "**'Graphiques d'arriere-plan'** (ou 'Background graphics') dans les options "
-                    "supplementaires pour que les couleurs des graphiques soient correctement imprimees.")
-            import streamlit.components.v1 as _comp_pr
-            _comp_pr.html('<script>setTimeout(function(){window.parent.print();}, 2000);</script>', height=0)
-            if st.button("Retour au mode normal", key="btn_exit_print"):
-                st.session_state.pop("_rapport_print", None)
-                st.rerun()
-        _render_rapport_complet(_rpt_nom, _Path, print_mode=_is_print)
+        _render_rapport_complet(_rpt_nom, _Path, print_mode=False)
         return
 
     # ─── Ecran d'accueil : choix du plan ──────────────────────────────────
