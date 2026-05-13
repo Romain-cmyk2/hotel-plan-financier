@@ -700,13 +700,14 @@ def _compute_rocher(p):
         for pr in prets_ro if pr["montant"] > 0
     }
 
-    # Amortissement annuel Rocher
-    amort_an_ro = sum(
-        inv["montant"] / inv["duree_amort"]
-        for inv in rd.get("investissements", [])
-        if inv.get("duree_amort", 0) > 0
-    )
-    amort_m_ro = amort_an_ro / 12
+    rocher_inv = rd.get("investissements", [])
+
+    # ISOC Rocher : meme logique qu'Argenteau (charge en dec, paiement juin N+1,
+    # report des pertes sur les benefices futurs)
+    isoc_rate_ro = p.get("isoc", 0.25)
+    pertes_reportees_ro = 0.0
+    isoc_a_payer_ro = {}
+    resultat_annee_ro_cum = 0.0
 
     rows_ro = []
     for m in range(nb_mois):
@@ -724,6 +725,12 @@ def _compute_rocher(p):
             if not r.empty:
                 int_pay += r.iloc[0]["interets"]
                 cap_pay += r.iloc[0]["capital"]
+        # Amortissement du mois : par actif, plafonne (terrain = 0)
+        amort_m_courant = 0.0
+        for inv in rocher_inv:
+            _duree = inv.get("duree_amort", 0)
+            if _duree > 0 and m < _duree * 12:
+                amort_m_courant += inv["montant"] / (_duree * 12)
         # Subside RW Rocher (15 ans, a partir de An 2)
         annee_idx = m // 12
         sub_rw = 0
@@ -733,16 +740,44 @@ def _compute_rocher(p):
                     duree_sub = 15
                     if (annee_idx - 1) < duree_sub:
                         sub_rw += _pr["montant"] / duree_sub / 12
-        resultat = rev + int_rec - int_pay - amort_m_ro + sub_rw
-        cash = rev + int_rec + cap_rec - int_pay - cap_pay
+        # Resultat avant impot
+        rai_m = rev + int_rec - int_pay - amort_m_courant + sub_rw
+        resultat_annee_ro_cum += rai_m
+
+        # ISOC : calcule en decembre, paye en juin N+1
+        impot_charge_ro = 0.0
+        impot_cash_ro = 0.0
+        if d.month == 12:
+            if resultat_annee_ro_cum > 0:
+                base_imp = resultat_annee_ro_cum - pertes_reportees_ro
+                if base_imp > 0:
+                    impot_charge_ro = base_imp * isoc_rate_ro
+                    pertes_reportees_ro = 0
+                else:
+                    impot_charge_ro = 0
+                    pertes_reportees_ro = -base_imp
+            else:
+                impot_charge_ro = 0
+                pertes_reportees_ro += abs(resultat_annee_ro_cum)
+            isoc_a_payer_ro[d.year] = impot_charge_ro
+            resultat_annee_ro_cum = 0.0
+        if d.month == 6 and (d.year - 1) in isoc_a_payer_ro:
+            impot_cash_ro = isoc_a_payer_ro.pop(d.year - 1)
+
+        resultat = rai_m - impot_charge_ro
+        cash = rev + int_rec + cap_rec - int_pay - cap_pay - impot_cash_ro
+        dette_isoc_m = sum(isoc_a_payer_ro.values())
+
         rows_ro.append({
             "date": d, "annee": d.year,
             "loyer": rev, "interets_recus": int_rec, "capital_recu": cap_rec,
             "interets_payes": int_pay, "capital_paye": cap_pay,
-            "amortissement": amort_m_ro, "subside_rw": sub_rw,
+            "amortissement": amort_m_courant, "subside_rw": sub_rw,
             "produits": rev + int_rec + sub_rw,
-            "charges": int_pay + amort_m_ro,
+            "charges": int_pay + amort_m_courant + impot_charge_ro,
+            "rai": rai_m, "impot": impot_charge_ro, "impot_cash": impot_cash_ro,
             "resultat": resultat, "cash": cash,
+            "dette_isoc": dette_isoc_m,
         })
     df_ro = pd.DataFrame(rows_ro)
     df_ro["cash_cumul"] = df_ro["cash"].cumsum()
@@ -752,8 +787,10 @@ def _compute_rocher(p):
         "interets_payes": "sum", "capital_paye": "sum",
         "amortissement": "sum", "subside_rw": "sum",
         "produits": "sum", "charges": "sum",
+        "rai": "sum", "impot": "sum", "impot_cash": "sum",
         "resultat": "sum", "cash": "sum",
         "cash_cumul": "last", "res_cumul": "last",
+        "dette_isoc": "last",
     }).reset_index()
     return ann_ro, prets_ro, fp_ro
 
@@ -855,18 +892,274 @@ def _section_rocher_table(ann_ro):
             fmt(row["capital_recu"]),
             fmt(row["interets_payes"]),
             fmt(row["amortissement"]),
+            fmt(row.get("rai", 0)),
+            fmt(row.get("impot", 0)),
             fmt(row["resultat"]),
             fmt(row["res_cumul"]),
+            fmt(row.get("impot_cash", 0)),
             fmt(row["capital_paye"]),
             fmt(row["cash"]),
             fmt(row["cash_cumul"]),
         ])
     return _table_html(
         ["Annee", "Loyer recu", "Interets recus", "Subside RW", "Capital recu (Ch.)",
-         "Interets payes", "Amortissement", "Resultat", "Resultat cumule",
+         "Interets payes", "Amortissement", "RAI", "ISOC (charge)",
+         "Resultat Net", "Resultat cumule", "ISOC (paye)",
          "Remb. capital paye", "Cash flow", "Cash flow cumul"],
         rows,
     )
+
+
+def _section_compte_resultat_rocher(ann_ro):
+    """Compte de resultat structure Rocher (annees en colonnes)."""
+    years = [str(int(a)) for a in ann_ro["annee"]]
+    rows = []
+
+    def row(label, vals, bold=False, indent=0, sep=False, is_pct=False):
+        rows.append((label, vals, bold, indent, sep, is_pct))
+
+    ca = list(ann_ro["loyer"])
+    amort = list(ann_ro["amortissement"])
+    int_rec = list(ann_ro["interets_recus"])
+    int_pay = list(ann_ro["interets_payes"])
+    sub_rw = list(ann_ro["subside_rw"])
+    ebitda = ca  # Pas de charges d'exploitation chez Rocher (SCI)
+    ebit = [ebitda[i] - amort[i] for i in range(len(ca))]
+    rai = list(ann_ro["rai"]) if "rai" in ann_ro.columns else \
+          [ebit[i] + sub_rw[i] + int_rec[i] - int_pay[i] for i in range(len(ca))]
+    impot = list(ann_ro["impot"]) if "impot" in ann_ro.columns else [0.0] * len(ca)
+    rn = list(ann_ro["resultat"])
+
+    row("Chiffre d'affaires", ca, bold=True)
+    row("dont Loyer Chateau d'Argenteau", ca, indent=1)
+    row("EBITDA", ebitda, bold=True, sep=True)
+    row("(-) Amortissements", [-v for v in amort])
+    row("EBIT", ebit, bold=True, sep=True)
+    row("(+) Reprise sur subsides en capital", sub_rw)
+    row("(+) Produits financiers (interets recus Chateau)", int_rec)
+    row("(-) Charges d'interets", [-v for v in int_pay])
+    row("RESULTAT AVANT IMPOT", rai, bold=True, sep=True)
+    row("(-) Impot des societes (ISOC)", [-v for v in impot])
+    row("RESULTAT NET", rn, bold=True, sep=True)
+
+    h = ['<div style="overflow-x:auto;"><table style="border-collapse:collapse; width:100%; font-size:0.85em;">']
+    h.append('<thead><tr style="background:#11998e; color:white;">')
+    h.append('<th style="padding:6px 10px; text-align:left; border:1px solid #ccc;">Poste</th>')
+    for y in years:
+        h.append(f'<th style="padding:6px 10px; text-align:right; border:1px solid #ccc;">{y}</th>')
+    h.append("</tr></thead><tbody>")
+    for idx, (label, vals, bold, indent, sep, is_pct) in enumerate(rows):
+        bg = "#e8f7f3" if bold else ("#ffffff" if idx % 2 == 0 else "#fafbfc")
+        font = "font-weight:700;" if bold else ""
+        border_top = "border-top:2px solid #11998e;" if sep else ""
+        prefix = "&nbsp;&nbsp;&nbsp;&nbsp;" * indent
+        h.append(f'<tr style="background:{bg}; {border_top}">')
+        h.append(f'<td style="padding:5px 10px; text-align:left; border:1px solid #e0e0e0; {font}">{prefix}{label}</td>')
+        for v in vals:
+            cell = f"{v:.1f}%" if is_pct else _fmt_e(v)
+            h.append(f'<td style="padding:5px 10px; text-align:right; border:1px solid #e0e0e0; {font}">{cell}</td>')
+        h.append("</tr>")
+    h.append("</tbody></table></div>")
+    return "".join(h)
+
+
+def _section_bilan_rocher(p, ann_ro):
+    """Bilan detaille Rocher au 31/12 de chaque annee complete."""
+    import pandas as pd
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+
+    d_open = p["date_ouverture"]
+    nb_mois = p["nb_mois_projection"]
+    d_end = d_open + relativedelta(months=nb_mois - 1)
+    # Annees ayant un decembre dans la projection
+    years_dec = set()
+    for a in ann_ro["annee"]:
+        if date(int(a), 12, 1) <= date(d_end.year, d_end.month, 1):
+            years_dec.add(int(a))
+    ann = ann_ro[ann_ro["annee"].isin(years_dec)].reset_index(drop=True)
+    if len(ann) == 0:
+        return "<p>Pas d'annee complete disponible pour le bilan Rocher.</p>"
+
+    rd = p.get("rocher_data", {})
+    fp_ro = rd.get("fonds_propres_initial", 0)
+    prets_ro = rd.get("prets", [])
+    pret_rocher_ch = next(
+        (pr for pr in p.get("prets", []) if "rocher" in pr.get("nom", "").lower()), None
+    )
+    df_pret_ch_ro = (
+        calc_tableau_pret(pret_rocher_ch, d_open, nb_mois)
+        if pret_rocher_ch else pd.DataFrame()
+    )
+
+    years = [str(int(a)) for a in ann["annee"]]
+    n = len(ann)
+
+    # Encours par pret Rocher au 31/12 N et N+1
+    enc = {}; enc_next = {}; is_sub = {}
+    for pr in prets_ro:
+        if pr.get("montant", 0) > 0:
+            nm = pr["nom"]
+            if pr.get("subside_rw"):
+                nm += " (RW)"
+            is_sub[nm] = bool(pr.get("subside_rw"))
+            dfp = calc_tableau_pret(pr, d_open, nb_mois)
+            enc[nm] = []; enc_next[nm] = []
+            for a in ann["annee"]:
+                d_fin = date(int(a), 12, 31)
+                r = dfp[dfp["date"] <= d_fin]
+                enc[nm].append(r.iloc[-1]["capital_restant"] if not r.empty else 0)
+                d2 = date(int(a) + 1, 12, 31)
+                r2 = dfp[dfp["date"] <= d2]
+                enc_next[nm].append(r2.iloc[-1]["capital_restant"] if not r2.empty else 0)
+
+    def cls(nm):
+        nl = (nm or "").lower()
+        if "banque" in nl or "bank" in nl or "(rw)" in nl:
+            return "banque"
+        return "autres"
+
+    bk_lt = [0.0] * n; bk_ct = [0.0] * n
+    au_lt = [0.0] * n; au_ct = [0.0] * n
+    for nm, lst in enc.items():
+        nxt = enc_next[nm]
+        if is_sub[nm]:
+            continue
+        c = cls(nm)
+        for i in range(n):
+            lt = nxt[i]
+            ct = max(lst[i] - nxt[i], 0)
+            if c == "banque":
+                bk_lt[i] += lt; bk_ct[i] += ct
+            else:
+                au_lt[i] += lt; au_ct[i] += ct
+
+    # Subside RW Rocher : 3 phases (notifie/percu/amorti) - cf. Argenteau
+    subs_loans = [pr for pr in prets_ro
+                  if pr.get("subside_rw") and pr.get("montant", 0) > 0]
+    grant_total = sum(pr["montant"] for pr in subs_loans)
+    subs_amort_cumul = list(ann["subside_rw"].cumsum())
+    receipt_date = d_open + relativedelta(years=1)
+    cash_received = []
+    for a in ann["annee"]:
+        d_end_y = date(int(a), 12, 31)
+        cash_received.append(grant_total if receipt_date <= d_end_y else 0)
+    sub_a_rec = [max(0.0, grant_total - cash_received[i]) for i in range(n)]
+    sub_en_cap = [max(0.0, grant_total - subs_amort_cumul[i]) for i in range(n)]
+    dette_subs = [max(0.0, grant_total - cash_received[i]) for i in range(n)]
+
+    # Immobilisations Rocher
+    invs_init = [inv for inv in rd.get("investissements", [])
+                 if inv.get("montant", 0) > 0 and (inv.get("categorie") or "").strip()]
+    amort_cumul = list(ann["amortissement"].cumsum())
+    brut_init = sum(inv["montant"] for inv in invs_init)
+    vnc = [brut_init - amort_cumul[i] for i in range(n)]
+
+    # Creance financiere : pret octroye au Chateau (capital restant du)
+    creance = []; creance_next = []
+    for a in ann["annee"]:
+        if pret_rocher_ch and not df_pret_ch_ro.empty:
+            d_fin = date(int(a), 12, 31)
+            r = df_pret_ch_ro[df_pret_ch_ro["date"] <= d_fin]
+            creance.append(r.iloc[-1]["capital_restant"] if not r.empty else 0)
+            d2 = date(int(a) + 1, 12, 31)
+            r2 = df_pret_ch_ro[df_pret_ch_ro["date"] <= d2]
+            creance_next.append(r2.iloc[-1]["capital_restant"] if not r2.empty else 0)
+        else:
+            creance.append(0); creance_next.append(0)
+    creance_lt = list(creance_next)
+    creance_ct = [max(creance[i] - creance_next[i], 0) for i in range(n)]
+
+    # Tresorerie Rocher : surplus initial + cash flow cumule
+    pret_ch_mt = pret_rocher_ch["montant"] if pret_rocher_ch else 0
+    surplus = (fp_ro + sum(pr["montant"] for pr in prets_ro)
+               - sum(inv["montant"] for inv in rd.get("investissements", []))
+               - pret_ch_mt)
+    treso = [v + surplus for v in ann["cash_cumul"]]
+    res_cum = list(ann["resultat"].cumsum())
+
+    rows = []
+    def row(label, vals, bold=False, indent=0, sep=False, header=False):
+        rows.append((label, vals, bold, indent, sep, header))
+
+    row("ACTIF", [""] * n, bold=True, header=True)
+    row("Actifs immobilises (brut)", [""] * n, bold=True, indent=1)
+    for inv in invs_init:
+        row(inv["categorie"], [inv["montant"]] * n, indent=2)
+    row("(-) Amortissements cumules", [-v for v in amort_cumul], indent=2)
+    row("VNC totale immobilisations", vnc, bold=True, indent=1)
+    row("Actifs financiers", [""] * n, bold=True, indent=1)
+    if any(v != 0 for v in creance_lt):
+        row("Creance pret Chateau (> 1 an)", creance_lt, indent=2)
+    row("Actifs circulants", [""] * n, bold=True, indent=1)
+    if any(v != 0 for v in creance_ct):
+        row("Creance pret Chateau (<= 1 an)", creance_ct, indent=2)
+    row("Tresorerie", treso, indent=2)
+    if any(v != 0 for v in sub_a_rec):
+        row("Subside RW a recevoir", sub_a_rec, indent=2)
+    total_actif = [vnc[i] + creance_lt[i] + creance_ct[i]
+                   + treso[i] + sub_a_rec[i] for i in range(n)]
+    row("TOTAL ACTIF", total_actif, bold=True, sep=True)
+
+    row("PASSIF", [""] * n, bold=True, header=True)
+    row("Capitaux propres", [""] * n, bold=True, indent=1)
+    row("Capital", [fp_ro] * n, indent=2)
+    row("Resultats cumules (reserves)", res_cum, indent=2)
+    if any(v != 0 for v in sub_en_cap):
+        row("Subsides en capital (non amortis)", sub_en_cap, indent=2)
+    row("Dettes > 1 an", [""] * n, bold=True, indent=1)
+    row("Dette bancaire LT", bk_lt, indent=2)
+    if any(v != 0 for v in au_lt):
+        row("Autres dettes LT", au_lt, indent=2)
+    if any(v != 0 for v in dette_subs):
+        row("Dette financant subside (RW)", dette_subs, indent=2)
+    row("Dettes <= 1 an", [""] * n, bold=True, indent=1)
+    part_ct = [bk_ct[i] + au_ct[i] for i in range(n)]
+    row("Part LT echeant dans 1 an", part_ct, indent=2)
+    dette_isoc_ro = list(ann["dette_isoc"]) if "dette_isoc" in ann.columns else [0] * n
+    if any(v > 0 for v in dette_isoc_ro):
+        row("ISOC a payer", dette_isoc_ro, indent=2)
+    total_passif = []
+    for i in range(n):
+        t = (fp_ro + res_cum[i] + sub_en_cap[i]
+             + bk_lt[i] + au_lt[i] + dette_subs[i] + part_ct[i]
+             + dette_isoc_ro[i])
+        total_passif.append(t)
+    row("TOTAL PASSIF", total_passif, bold=True, sep=True)
+    ecart = [total_actif[i] - total_passif[i] for i in range(n)]
+    if any(abs(v) > 1 for v in ecart):
+        row("Ecart (actif - passif)", ecart, indent=1)
+
+    h = ['<div style="overflow-x:auto;"><table style="border-collapse:collapse; width:100%; font-size:0.85em;">']
+    h.append('<thead><tr style="background:#0b6e66; color:white;">')
+    h.append('<th style="padding:6px 10px; text-align:left; border:1px solid #ccc;">Poste</th>')
+    for y in years:
+        h.append(f'<th style="padding:6px 10px; text-align:right; border:1px solid #ccc;">{y}</th>')
+    h.append("</tr></thead><tbody>")
+    for idx, (label, vals, bold, indent, sep, header) in enumerate(rows):
+        if header:
+            bg = "#d4f1ea"
+        elif bold:
+            bg = "#e8f7f3"
+        else:
+            bg = "#ffffff" if idx % 2 == 0 else "#fafbfc"
+        font = "font-weight:700;" if (bold or header) else ""
+        border_top = "border-top:2px solid #0b6e66;" if sep else ""
+        prefix = "&nbsp;&nbsp;&nbsp;&nbsp;" * indent
+        h.append(f'<tr style="background:{bg}; {border_top}">')
+        h.append(f'<td style="padding:5px 10px; text-align:left; border:1px solid #e0e0e0; {font}">{prefix}{label}</td>')
+        for v in vals:
+            if v == "" or v is None:
+                cell = ""
+            else:
+                try:
+                    cell = _fmt_e(float(v))
+                except Exception:
+                    cell = ""
+            h.append(f'<td style="padding:5px 10px; text-align:right; border:1px solid #e0e0e0; {font}">{cell}</td>')
+        h.append("</tr>")
+    h.append("</tbody></table></div>")
+    return "".join(h)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -1405,6 +1698,12 @@ def build_rapport_html(plan_nom, params):
 
     <h3>Endettement</h3>
     {_fig_html(figs_ro.get('ro_endettement'), 400) if 'ro_endettement' in figs_ro else ''}
+
+    <h3>Compte de resultat</h3>
+    {_section_compte_resultat_rocher(ann_ro)}
+
+    <h3>Bilan detaille (au 31/12)</h3>
+    {_section_bilan_rocher(p, ann_ro)}
 
     <h2 id="sec-5" style="border-bottom-color:#f5576c;">5. Plan financier — Château d'Argenteau</h2>
     {f'<div class="comment-box ch">{comment_ch}</div>' if comment_ch else ''}
